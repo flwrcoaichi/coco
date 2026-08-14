@@ -73,7 +73,7 @@ class ContainerButton(ui.DynamicItem[ui.Button[ui.View]], template=r"cm:c:(\d+):
 
     only item_id is encoded (not the container name) to keep custom_ids well
     under discord's 100-char limit regardless of how long a container name
-    is — item_id is a short random per-guild token from new_item_id()."""
+    is - item_id is a short random per-guild token from new_item_id()."""
 
     def __init__(self, *, guild_id: int, container_name: str, item_id: str, label: str, style: discord.ButtonStyle) -> None:
         item: ui.Button[ui.View] = ui.Button(
@@ -131,14 +131,12 @@ class MessagesCog(commands.Cog, name="messages"):
         default_permissions=discord.Permissions(manage_guild=True),
     )
 
-    # ---- /messages ----
-
     @messages.command(name="set", description="create or update a named message")
     @app_commands.describe(
         name="short name to refer to this message by (e.g. rules, help)",
         content="the message text (use \\n for a line break)",
         container="name of a saved button set to attach (see /buttons), for clickable buttons",
-        action="what happens when someone reacts (none, reaction_role) — separate from buttons",
+        action="what happens when someone reacts (none, reaction_role) - separate from buttons",
         role="role to grant, required for reaction_role",
         emoji="emoji to react with, required for reaction_role",
     )
@@ -169,7 +167,7 @@ class MessagesCog(commands.Cog, name="messages"):
             existing = await get_container(self.bot.db, interaction.guild.id, container)
             if existing is None:
                 await interaction.response.send_message(
-                    f"no button set named `{container}` — create one with `/buttons additem`", ephemeral=True
+                    f"no button set named `{container}` - create one with `/buttons additem`", ephemeral=True
                 )
                 return
         await upsert_message(
@@ -184,7 +182,7 @@ class MessagesCog(commands.Cog, name="messages"):
             interaction.user.id,
         )
         await interaction.response.send_message(
-            f"saved message `{name}` — use `/messages send name:{name}` to post it", ephemeral=True
+            f"saved message `{name}` - use `/messages send name:{name}` to post it", ephemeral=True
         )
 
     @messages.command(name="send", description="post a saved message into a channel")
@@ -207,13 +205,13 @@ class MessagesCog(commands.Cog, name="messages"):
             if container is None:
                 await interaction.response.send_message(
                     f"message references button set `{msg['container_name']}` which no longer exists"
-                    " — fix with `/messages set` or `/buttons create`",
+                    " - fix with `/messages set` or `/buttons create`",
                     ephemeral=True,
                 )
                 return
             if not container["items"]:
                 await interaction.response.send_message(
-                    f"button set `{msg['container_name']}` has no buttons yet — add one with `/buttons additem`",
+                    f"button set `{msg['container_name']}` has no buttons yet - add one with `/buttons additem`",
                     ephemeral=True,
                 )
                 return
@@ -232,7 +230,7 @@ class MessagesCog(commands.Cog, name="messages"):
                 await posted.add_reaction(msg["action_emoji"])
             except discord.HTTPException:
                 await interaction.response.send_message(
-                    f"posted, but couldn't react with `{msg['action_emoji']}` —"
+                    f"posted, but couldn't react with `{msg['action_emoji']}` -"
                     " add it manually or check it's a valid emoji",
                     ephemeral=True,
                 )
@@ -250,7 +248,7 @@ class MessagesCog(commands.Cog, name="messages"):
             return
         lines = []
         for m in msgs:
-            posted = f" — posted in <#{m['channel_id']}>" if m["message_id"] else " — not posted yet"
+            posted = f" - posted in <#{m['channel_id']}>" if m["message_id"] else " - not posted yet"
             extras = []
             if m["action"] != "none":
                 extras.append(m["action"])
@@ -270,7 +268,6 @@ class MessagesCog(commands.Cog, name="messages"):
         await delete_message(self.bot.db, interaction.guild.id, name)
         await interaction.response.send_message(f"deleted `{name}`", ephemeral=True)
 
-    # ---- /buttons ----
 
     @buttons.command(name="additem", description="add a button to a button set (creates the set if needed)")
     @app_commands.describe(
@@ -278,7 +275,7 @@ class MessagesCog(commands.Cog, name="messages"):
         label="text shown on the button",
         style="button color",
         action="what the button does when clicked",
-        role="role to grant/toggle — required for the grant_role and give_role actions",
+        role="role to grant/toggle - required for the grant_role and give_role actions",
     )
     @app_commands.choices(
         style=[app_commands.Choice(name=s, value=s) for s in VALID_STYLES],
@@ -312,7 +309,7 @@ class MessagesCog(commands.Cog, name="messages"):
             data=data,
         )
         await interaction.response.send_message(
-            f"added button **{label}** (`{item_id}`) to `{container}` —"
+            f"added button **{label}** (`{item_id}`) to `{container}` -"
             f" attach it to a message with `/messages set ... container:{container}`",
             ephemeral=True,
         )
@@ -331,7 +328,7 @@ class MessagesCog(commands.Cog, name="messages"):
                 await interaction.response.send_message(f"`{container}` has no buttons yet", ephemeral=True)
                 return
             lines = [
-                f"`{i.get('id')}` **{i.get('label')}** ({i.get('style')}) — {i.get('action')} {i.get('data')}"
+                f"`{i.get('id')}` **{i.get('label')}** ({i.get('style')}) - {i.get('action')} {i.get('data')}"
                 for i in found["items"]
             ]
             layout = BaseLayout()
@@ -341,9 +338,9 @@ class MessagesCog(commands.Cog, name="messages"):
 
         containers = await get_containers(self.bot.db, interaction.guild.id)
         if not containers:
-            await interaction.response.send_message("no button sets yet — create one with `/buttons additem`", ephemeral=True)
+            await interaction.response.send_message("no button sets yet - create one with `/buttons additem`", ephemeral=True)
             return
-        lines = [f"`{c['name']}` — {len(c['items'])} button(s)" for c in containers]
+        lines = [f"`{c['name']}` - {len(c['items'])} button(s)" for c in containers]
         layout = BaseLayout()
         layout.add_container(discord.ui.TextDisplay("\n".join(lines)), accent_color=0x5865F2)
         await interaction.response.send_message(view=layout, ephemeral=True)
@@ -366,11 +363,11 @@ class MessagesCog(commands.Cog, name="messages"):
             return
         await delete_container(self.bot.db, interaction.guild.id, container)
         await interaction.response.send_message(
-            f"deleted button set `{container}` — any messages referencing it will show an error until updated",
+            f"deleted button set `{container}` - any messages referencing it will show an error until updated",
             ephemeral=True,
         )
 
-    # ---- reaction roles (unchanged mechanism, buttons are handled by ContainerButton) ----
+    
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:

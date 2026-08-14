@@ -27,7 +27,7 @@ log = get_logger("radio")
 
 class RadioCog(commands.Cog, name="radio"):
     """a per-guild endless shuffle of an admin-curated playlist. separate from
-    the regular music queue on purpose — /music play is a one-off request,
+    the regular music queue on purpose - /music play is a one-off request,
     /radio is a background loop that just keeps going until stopped."""
 
     def __init__(self, bot: "Bot") -> None:
@@ -46,7 +46,7 @@ class RadioCog(commands.Cog, name="radio"):
     async def _run_loop(self, guild_id: int) -> None:
         music_cog = self.bot.get_cog("music")
         if music_cog is None:
-            log.warning("radio loop for guild %s ended — music cog not loaded", guild_id)
+            log.warning("radio loop for guild %s ended - music cog not loaded", guild_id)
             return
         try:
             while True:
@@ -183,7 +183,7 @@ class RadioCog(commands.Cog, name="radio"):
         tracks = await list_tracks(self.bot.db, guild.id)
         if not tracks:
             await interaction.response.send_message(
-                "the radio playlist is empty — add tracks with `/radio add` first", ephemeral=True
+                "the radio playlist is empty - add tracks with `/radio add` first", ephemeral=True
             )
             return
         await set_state(self.bot.db, guild.id, enabled=True, voice_channel_id=target.id, shuffle=shuffle)

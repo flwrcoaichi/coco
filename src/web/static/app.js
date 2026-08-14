@@ -422,7 +422,7 @@ async function executeAction(action) {
 function initEvents() {
   elements.loginButton.addEventListener("click", () => {
     if (!state.clientId) {
-      alert("this dashboard isn't fully configured yet — DISCORD_CLIENT_ID is missing on the bot.");
+      alert("this dashboard isn't fully configured yet - DISCORD_CLIENT_ID is missing on the bot.");
       return;
     }
 

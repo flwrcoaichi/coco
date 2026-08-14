@@ -10,10 +10,10 @@ log = get_logger("twitch.api")
 
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID", "")
 TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET", "")
-# webhook transport (see webserver.py) — required to track streamers other than
-# the app owner. websocket transport only works for broadcasters who've
-# authorized this app via user OAuth, which in practice means just yourself;
-# webhook transport uses an app access token and works for anyone.
+
+
+
+
 TWITCH_WEBHOOK_SECRET = os.getenv("TWITCH_WEBHOOK_SECRET", "")
 TWITCH_WEBHOOK_CALLBACK_URL = os.getenv("TWITCH_WEBHOOK_CALLBACK_URL", "")
 
@@ -58,6 +58,57 @@ class TwitchClient:
             await self._get_token()
             resp = await self._session.request(method, url, headers=self._headers(), **kwargs)
         return resp
+    
+    async def get_channel_info(self, broadcaster_id: str) -> dict[str, str] | None:
+        resp = await self._request(
+            "GET",
+            "https://api.twitch.tv/helix/channels",
+            params={"broadcaster_id": broadcaster_id},
+        )
+        data = await resp.json()
+        if not data.get("data"):
+            return None
+        return data["data"][0]
+
+    async def create_clip(self, broadcaster_id: str, user_token: str) -> str | None:
+        """requires `user_token` (no 'oauth:' prefix) with clips:edit scope,
+        belonging to the broadcaster or an editor on their channel."""
+        assert self._session is not None
+        resp = await self._session.post(
+            "https://api.twitch.tv/helix/clips",
+            params={"broadcaster_id": broadcaster_id},
+            headers={"Client-Id": TWITCH_CLIENT_ID, "Authorization": f"Bearer {user_token}"},
+        )
+        if resp.status != 202:
+            log.error("create_clip failed: %s %s", resp.status, await resp.text())
+            return None
+        data = await resp.json()
+        slug = data["data"][0]["id"]
+        return f"https://clips.twitch.tv/{slug}"
+
+    async def get_followage(
+        self, broadcaster_id: str, user_id: str, moderator_id: str, moderator_token: str
+    ) -> str | None:
+        """requires `moderator_token` (no 'oauth:' prefix) with
+        moderator:read:followers scope, belonging to a moderator of the
+        broadcaster's channel (or the broadcaster themselves).
+        returns an ISO8601 followed_at timestamp, or None if not following."""
+        assert self._session is not None
+        resp = await self._session.get(
+            "https://api.twitch.tv/helix/channels/followers",
+            params={"broadcaster_id": broadcaster_id, "user_id": user_id},
+            headers={
+                "Client-Id": TWITCH_CLIENT_ID,
+                "Authorization": f"Bearer {moderator_token}",
+            },
+        )
+        if resp.status != 200:
+            log.error("get_followage failed: %s %s", resp.status, await resp.text())
+            return None
+        data = await resp.json()
+        if not data.get("data"):
+            return None
+        return str(data["data"][0]["followed_at"])
 
     async def get_user_id(self, username: str) -> tuple[str, str] | None:
         resp = await self._request(
@@ -101,7 +152,7 @@ class TwitchClient:
         return int(data.get("total", 0))
 
     async def subscribe_to_stream_online_ws(self, broadcaster_user_id: str, session_id: str) -> str | None:
-        """subscribe using websocket transport — the subscription is delivered to
+        """subscribe using websocket transport - the subscription is delivered to
         the eventsub websocket connection identified by `session_id`, no public
         callback url involved.
 
@@ -129,7 +180,7 @@ class TwitchClient:
     async def subscribe_to_stream_online_webhook(
         self, broadcaster_user_id: str, callback_url: str, secret: str
     ) -> str | None:
-        """subscribe using webhook transport — twitch POSTs events to
+        """subscribe using webhook transport - twitch POSTs events to
         `callback_url` (must be a public https url), signed with `secret`.
         works for any broadcaster, no per-user OAuth needed, since this uses
         an app access token."""

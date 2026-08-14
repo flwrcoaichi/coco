@@ -23,7 +23,7 @@ WEBHOOK_PATH = "/webhook/twitch"
 
 def _verify_signature(headers: "web.RequestHeaders", body: bytes) -> bool:
     if not TWITCH_WEBHOOK_SECRET:
-        # misconfiguration — refuse rather than silently accepting unsigned payloads
+        
         return False
     msg_id = headers.get("Twitch-Eventsub-Message-Id", "")
     timestamp = headers.get("Twitch-Eventsub-Message-Timestamp", "")
@@ -38,7 +38,7 @@ def _verify_signature(headers: "web.RequestHeaders", body: bytes) -> bool:
 
 def build_app(notify_callback: NotifyCallback) -> web.Application:
     """builds the tiny aiohttp app that receives twitch's EventSub webhook
-    deliveries. this is intentionally minimal — just the one route — and
+    deliveries. this is intentionally minimal - just the one route - and
     runs on its own port, independent of the main dashboard
     (src/web/server.py)."""
     app = web.Application()
@@ -79,7 +79,7 @@ def build_app(notify_callback: NotifyCallback) -> web.Application:
 class TwitchWebhookServer:
     """runs the EventSub webhook receiver on its own port. requires a
     publicly reachable https url (TWITCH_WEBHOOK_CALLBACK_URL) pointing at
-    this port + WEBHOOK_PATH — twitch will POST event deliveries here."""
+    this port + WEBHOOK_PATH - twitch will POST event deliveries here."""
 
     def __init__(
         self,

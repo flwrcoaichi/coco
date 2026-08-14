@@ -103,7 +103,7 @@ class TicketReasonModal(BaseModal):
         layout = BaseLayout()
         layout.add_container(
             ui.TextDisplay(
-                f"# ticket opened\n{interaction.user.mention} — a member of staff will be with you shortly.\n\n**Reason:** {self.reason.value.strip() or 'no reason provided'}"
+                f"# ticket opened\n{interaction.user.mention} - a member of staff will be with you shortly.\n\n**Reason:** {self.reason.value.strip() or 'no reason provided'}"
             ),
             accent_color=0x57F287,
         )

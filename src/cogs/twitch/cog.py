@@ -291,7 +291,7 @@ class ConfigView(discord.ui.View):
 
 class TwitchCog(commands.Cog, name="twitch"):
     """twitch live-notification tracking. subscriptions are delivered over
-    EventSub's webhook transport (`webserver.py`) — this requires a public
+    EventSub's webhook transport (`webserver.py`) - this requires a public
     https callback url (TWITCH_WEBHOOK_CALLBACK_URL) and a shared secret
     (TWITCH_WEBHOOK_SECRET), but works for any broadcaster rather than just
     the app owner. see the README for setup."""
@@ -309,7 +309,7 @@ class TwitchCog(commands.Cog, name="twitch"):
         if self.bot.config.twitch_webhook_enabled:
             if not self.bot.config.twitch_webhook_callback_url:
                 log.warning(
-                    "TWITCH_WEBHOOK_CALLBACK_URL is not set — /twitch setup will fail to"
+                    "TWITCH_WEBHOOK_CALLBACK_URL is not set - /twitch setup will fail to"
                     " subscribe until it's configured"
                 )
             await self.webhook_server.start()
@@ -334,7 +334,7 @@ class TwitchCog(commands.Cog, name="twitch"):
             return
         if not self.bot.config.twitch_webhook_callback_url:
             await ctx.send(
-                "TWITCH_WEBHOOK_CALLBACK_URL isn't configured — set it in .env"
+                "TWITCH_WEBHOOK_CALLBACK_URL isn't configured - set it in .env"
                 " (e.g. https://flowerco.aichi.me:8082/webhook/twitch) and restart before tracking streamers"
             )
             return
@@ -356,14 +356,14 @@ class TwitchCog(commands.Cog, name="twitch"):
             await update_streamer(self.bot.db, user_id, guild_id=ctx.guild.id, subscription_id=sub_id)
         else:
             await ctx.send(
-                f"added **{display_name}**, but the eventsub subscription failed —"
+                f"added **{display_name}**, but the eventsub subscription failed -"
                 " check the bot logs and that TWITCH_WEBHOOK_CALLBACK_URL is publicly reachable"
             )
         user_info = await self.bot.twitch.get_user_info(user_id)
         profile_pic = str(user_info["profile_image_url"]) if user_info else ""
         embed = await build_config_embed(self.bot, user_id, profile_pic, ctx.guild.id)
         view = ConfigView(self.bot, user_id, profile_pic, ctx.guild.id)
-        await ctx.send(f"added **{display_name}** — configure below:", embed=embed, view=view)
+        await ctx.send(f"added **{display_name}** - configure below:", embed=embed, view=view)
 
     @commands.hybrid_command(name="edit", description="edit a tracked streamer's config")
     @commands.has_permissions(manage_guild=True)

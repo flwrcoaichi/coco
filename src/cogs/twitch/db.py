@@ -4,7 +4,8 @@ from src.data.db import Database
 
 _COLUMNS = (
     "twitch_user_id, twitch_username, guild_id, discord_channel_id, ping_role_id,"
-    " custom_message, footer_message, accent_color, subscription_id, is_live"
+    " custom_message, footer_message, accent_color, subscription_id, is_live,"
+    " live_message_channel_id, live_message_id"
 )
 _KEYS = (
     "twitch_user_id",
@@ -17,6 +18,8 @@ _KEYS = (
     "accent_color",
     "subscription_id",
     "is_live",
+    "live_message_channel_id",
+    "live_message_id",
 )
 
 
@@ -64,6 +67,14 @@ async def get_streamer_by_username(
 
 async def get_all_streamers(db: Database) -> list[dict[str, object]]:
     rows = await db.fetchall(f"select {_COLUMNS} from twitch_streamers")
+    return [_row_to_dict(r) for r in rows]
+
+
+async def get_live_streamers(db: Database) -> list[dict[str, object]]:
+    """streamers currently tracked as live with a message to keep fresh."""
+    rows = await db.fetchall(
+        f"select {_COLUMNS} from twitch_streamers where live_message_id != 0"
+    )
     return [_row_to_dict(r) for r in rows]
 
 

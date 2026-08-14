@@ -170,7 +170,7 @@ class MusicCog(commands.Cog, name="music"):
         metadata = current["metadata"]
         title = metadata.get("title", "unknown")
         uploader = metadata.get("uploader", "unknown")
-        await interaction.response.send_message(f"now playing: {title} — {uploader}")
+        await interaction.response.send_message(f"now playing: {title} - {uploader}")
 
     @music.command(name="queue", description="show the current music queue")
     async def queue_list(self, interaction: discord.Interaction) -> None:

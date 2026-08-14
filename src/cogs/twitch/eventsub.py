@@ -24,7 +24,7 @@ class EventSubWebSocket:
     """Twitch EventSub delivered over a plain outbound websocket.
 
     Twitch pushes events *to* this connection instead of us hosting a public
-    HTTPS callback — there's nothing to expose to the internet, no DuckDNS,
+    HTTPS callback - there's nothing to expose to the internet, no DuckDNS,
     no reverse proxy, no webhook secret. This connects the same way whether
     the bot runs on your laptop or a $5 VPS.
 
@@ -61,14 +61,14 @@ class EventSubWebSocket:
 
     async def subscribe(self, broadcaster_id: str) -> str | None:
         """subscribe to stream.online for a broadcaster. safe to call before the
-        websocket session is fully established — it'll wait briefly, and the id
+        websocket session is fully established - it'll wait briefly, and the id
         is remembered for automatic re-subscription on reconnect either way."""
         self._subscribed.add(broadcaster_id)
         try:
             await asyncio.wait_for(self._session_ready.wait(), timeout=_SESSION_READY_TIMEOUT)
         except asyncio.TimeoutError:
             log.warning(
-                "eventsub session not ready yet for %s — will subscribe once connected",
+                "eventsub session not ready yet for %s - will subscribe once connected",
                 broadcaster_id,
             )
             return None

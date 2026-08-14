@@ -90,7 +90,7 @@ def _layout(
 ) -> BaseLayout:
     target_str = str(target) if isinstance(target, str) else f"{target} (`{target.id}`)"
     lines = [
-        f"**{action}** — case `{case_str}`",
+        f"**{action}** - case `{case_str}`",
         f"**target:** {target_str}",
         f"**moderator:** {moderator}",
         f"**reason:** {reason}",
@@ -377,7 +377,7 @@ class ModerationActionsCog(commands.Cog, name="moderation"):
     @app_commands.describe(
         user="member to mute",
         reason="reason for the mute",
-        duration="mute length (e.g. 1h, 7d) — capped at 28 days by discord",
+        duration="mute length (e.g. 1h, 7d) - capped at 28 days by discord",
         quiet="skip logging and dm",
     )
     @require_permission("moderation.mute")
@@ -433,7 +433,7 @@ class ModerationActionsCog(commands.Cog, name="moderation"):
                         f"**duration:** {dur_str}",
                         "",
                         "if you have questions or want to discuss this, you can talk here.",
-                        f"a moderator will be with you shortly — {moderator.mention}",
+                        f"a moderator will be with you shortly - {moderator.mention}",
                     ]
                     mute_layout = BaseLayout()
                     mute_layout.add_container(
@@ -625,7 +625,7 @@ class ModerationActionsCog(commands.Cog, name="moderation"):
         deleted = await channel.purge(limit=amount, check=check)
 
         lines = [
-            f"**purge** — {len(deleted)} message(s) deleted",
+            f"**purge** - {len(deleted)} message(s) deleted",
             f"**channel:** {channel.mention}",
             f"**moderator:** {moderator}",
         ]
@@ -693,7 +693,7 @@ class ModerationActionsCog(commands.Cog, name="moderation"):
         layout = BaseLayout()
         layout.add_container(
             ui.TextDisplay(
-                f"**shutdown** — locked {len(locked)} channel(s)\n"
+                f"**shutdown** - locked {len(locked)} channel(s)\n"
                 + "\n".join(f"- {ch.mention}" for ch in locked[:20])
             ),
             accent_color=0xED4245,

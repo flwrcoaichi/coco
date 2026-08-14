@@ -28,7 +28,7 @@ class RaidConfig:
     join_threshold: int = 8
     join_window: int = 10
     account_age_min_days: int = 3
-    action: str = "kick"  # kick | ban
+    action: str = "kick"  
     log_channel_id: int = 0
     lockdown_active: bool = False
 
@@ -81,7 +81,7 @@ class RaidConfig:
 
 class AntiRaidCog(commands.Cog, name="antiraid"):
     """join-rate raid detection with automated lockdown. tracking state is per-cog-instance,
-    not module-global — nothing here is shared outside this cog."""
+    not module-global - nothing here is shared outside this cog."""
 
     def __init__(self, bot: "Bot") -> None:
         self.bot = bot
@@ -121,7 +121,7 @@ class AntiRaidCog(commands.Cog, name="antiraid"):
         await self._log(
             guild,
             cfg,
-            f"**raid detected** — locked {len(locked)} channel(s). run `/antiraid lockdown off` once it's clear.",
+            f"**raid detected** - locked {len(locked)} channel(s). run `/antiraid lockdown off` once it's clear.",
             0xED4245,
         )
         log.warning("lockdown triggered in guild %s (%d channels locked)", guild.id, len(locked))
@@ -157,7 +157,7 @@ class AntiRaidCog(commands.Cog, name="antiraid"):
                     await member.kick(reason=reason)
                 await self._log(
                     guild, cfg,
-                    f"**{cfg.action}ed** {member} (`{member.id}`) — {reason}",
+                    f"**{cfg.action}ed** {member} (`{member.id}`) - {reason}",
                     0xF57C00,
                 )
             except discord.HTTPException:

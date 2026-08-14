@@ -58,18 +58,6 @@ def _is_admin_guild(guild_data: dict[str, object]) -> bool:
 
 
 class DashboardServer:
-    """the bot's one and only web server. serves the static dashboard frontend
-    (src/web/static/) plus a JSON API, guarded by discord oauth (implicit
-    grant — the frontend gets a user access token directly, no client secret
-    involved on the frontend side).
-
-    this can also be run headless: if you host the frontend elsewhere (e.g.
-    GitHub Pages or Cloudflare Pages) and just want the API, set
-    DASHBOARD_ORIGIN to that frontend's origin so CORS allows it through and
-    point the frontend's `window.COCO_API_BASE` at wherever this server is
-    reachable (see src/web/static/index.html).
-    """
-
     def __init__(self, bot: "Bot") -> None:
         self.bot = bot
         self.config = bot.config
@@ -110,6 +98,8 @@ class DashboardServer:
 
     def _register_routes(self) -> None:
         self.app.router.add_get("/", self._serve_index)
+        self.app.router.add_get("/dashboard", self._serve_dashboard)
+        self.app.router.add_get("/docs", self._serve_docs)
         self.app.router.add_get("/static/{filename}", self._serve_static)
         self.app.router.add_get("/api/guilds", self._handle_guilds)
         self.app.router.add_get("/api/guild/{guild_id}/config", self._handle_get_config)
@@ -164,7 +154,7 @@ class DashboardServer:
         return None
 
     async def _handle_public_config(self, request: web.Request) -> web.Response:
-        """unauthenticated — tells the frontend which discord client id to use for
+        """unauthenticated - tells the frontend which discord client id to use for
         the oauth redirect, so it doesn't need to be hardcoded in static JS."""
         return web.json_response({"discord_client_id": self.config.discord_client_id})
 
@@ -496,7 +486,16 @@ class DashboardServer:
         return web.json_response({"ok": True})
 
     async def _serve_index(self, request: web.Request) -> web.Response:
-        path = os.path.join(os.path.dirname(__file__), "static", "index.html")
+        return await self._serve_html("index.html")
+
+    async def _serve_dashboard(self, request: web.Request) -> web.Response:
+        return await self._serve_html("dashboard.html")
+
+    async def _serve_docs(self, request: web.Request) -> web.Response:
+        return await self._serve_html("docs.html")
+
+    async def _serve_html(self, filename: str) -> web.Response:
+        path = os.path.join(os.path.dirname(__file__), "static", filename)
         with open(path, "r", encoding="utf-8") as file:
             return web.Response(text=file.read(), content_type="text/html")
 

@@ -18,11 +18,11 @@ class HelpCog(commands.Cog, name="help"):
         commands_list = []
         for command in sorted(self.bot.tree.walk_commands(), key=lambda c: c.name):
             if isinstance(command, app_commands.Group):
-                commands_list.append(f"/{command.name} — {command.description}")
+                commands_list.append(f"/{command.name} - {command.description}")
                 for sub in command.commands:
-                    commands_list.append(f"/{command.name} {sub.name} — {sub.description}")
+                    commands_list.append(f"/{command.name} {sub.name} - {sub.description}")
             else:
-                commands_list.append(f"/{command.name} — {command.description}")
+                commands_list.append(f"/{command.name} - {command.description}")
 
         if not commands_list:
             await interaction.response.send_message("no commands available", ephemeral=True)

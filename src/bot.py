@@ -10,7 +10,10 @@ from src.utils.logger import get_logger
 
 log = get_logger("bot")
 
-INITIAL_EXTENSIONS = (
+INITIAL_EXTENSIONS = (    
+    "src.cogs.twitchchat.cog",
+    "src.cogs.economy.cog",
+    "src.cogs.colorroles.cog",
     "src.cogs.moderation.cog",
     "src.cogs.antiraid.cog",
     "src.cogs.ticketing.cog",
@@ -45,9 +48,9 @@ class Bot(commands.Bot):
                 await self.load_extension(ext)
                 log.info("loaded extension %s", ext)
             except Exception:
-                # a single cog failing to load (e.g. music/twitch deps missing)
-                # must never take down moderation or anti-raid.
-                log.exception("failed to load extension %s — continuing without it", ext)
+                
+                
+                log.exception("failed to load extension %s - continuing without it", ext)
 
         try:
             synced = await self.tree.sync()

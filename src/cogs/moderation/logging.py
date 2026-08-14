@@ -27,7 +27,7 @@ async def log_infraction(db: Database, guild: discord.Guild, infraction: Infract
     moderator = guild.get_member(infraction.moderator_id)
     target = guild.get_member(infraction.target_id)
     lines = [
-        f"**{infraction.infraction_type}** — case `{infraction.case_str}`",
+        f"**{infraction.infraction_type}** - case `{infraction.case_str}`",
         f"**target:** {target or infraction.target_name} (`{infraction.target_id}`)",
         f"**moderator:** {moderator or infraction.moderator_id}",
         f"**reason:** {infraction.reason}",
