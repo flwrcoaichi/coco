@@ -22,6 +22,36 @@
             <a class="button button-tertiary" href="https://github.com/flwrcoaichi/coco">source</a>
           </nav>
         </header>
+        <section class="panel">
+          <p class="eyebrow">guides</p>
+          <h2>setting up ticketing</h2>
+          <ol>
+            <li>make a channel or category for tickets to open in.</li>
+            <li>run <code>/ticket panel #channel</code> - this posts the button members click to open a ticket.</li>
+            <li>optional: set a staff role and category from the dashboard's tickets tab, so new tickets ping staff and land in the right category.</li>
+            <li>staff can <code>/ticket add @member</code> to pull someone else into an open ticket, and <code>/ticket close</code> when it's done.</li>
+          </ol>
+        </section>
+ 
+        <section class="panel">
+          <h2>setting up twitch</h2>
+          <p><strong>go-live pings</strong> - no twitch-side setup needed. run <code>/setup</code>, pick the streamer's username, a discord channel, and (optionally) a role to ping. that's it.</p>
+          <p><strong>chat bot</strong> (custom commands, point system, chat relay) - the bot joins twitch chat as a bot account:</p>
+          <ol>
+            <li>in your twitch channel, mod the bot's twitch account so it can post and use moderator-gated features.</li>
+            <li>in your discord, run <code>/twitchchat setup &lt;your twitch channel&gt;</code>.</li>
+            <li>add custom commands with <code>/twitchcmd add</code>, or manage everything else with <code>/twitchchat</code>.</li>
+          </ol>
+        </section>
+ 
+        <section class="panel">
+          <h2>setting up color roles</h2>
+          <ol>
+            <li>create whatever color roles you want members to be able to pick (name and color are up to you).</li>
+            <li>members run <code>/color</code> and choose one - it swaps out any previous color role automatically.</li>
+            <li>no dashboard config needed; it reads from your server's existing roles.</li>
+          </ol>
+        </section>
 
  <!--        <section class="panel">
           <p class="eyebrow">docs</p>

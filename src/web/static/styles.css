@@ -16,6 +16,14 @@
   --font-display: 'Press Start 2P', monospace;
   --font-body: 'VT323', 'Courier New', monospace;
 }
+.eyebrow {
+  margin: 0 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 13px;
+  color: var(--accent);
+  font-family: var(--font-display);
+}
 
 * {
   box-sizing: border-box;
