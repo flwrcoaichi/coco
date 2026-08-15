@@ -61,7 +61,7 @@ async function init() {
   const user = await checkExistingSession();
   if (user) {
     
-    loginBtn.textContent = `dashboard (${user.username})`;
+    loginBtn.textContent = `${user.username}`;
     loginBtn.addEventListener("click", () => window.location.href = "/dashboard");
     
     if (user.avatar) {
