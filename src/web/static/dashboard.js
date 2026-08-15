@@ -490,8 +490,14 @@ function renderBuilderPreview() {
   });
 }
 
+function getNewId() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(4)))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 function addBuilderButton() {
-  builderButtons.push({ label: "", style: "secondary", action: "grant_role", roleId: "" });
+  builderButtons.push({ id: getNewId(), label: "", style: "secondary", action: "grant_role", roleId: "" });
   renderBtnList();
   renderBuilderPreview();
 }
@@ -547,11 +553,17 @@ function renderBtnList() {
     row.appendChild(roleRow);
 
     row.querySelectorAll("input,select").forEach(el => {
-      el.addEventListener("input", () => {
-        if (el.dataset.prop) builderButtons[el.dataset.i][el.dataset.prop] = el.value;
-        renderBuilderPreview();
-      });
-    });
+  el.addEventListener("input", () => {
+    if (el.dataset.prop) {
+      let val = el.value;
+      if (el.dataset.prop === "roleId") {
+        val = String(val).trim();
+      }
+      builderButtons[el.dataset.i][el.dataset.prop] = val;
+    }
+    renderBuilderPreview();
+  });
+});
     row.querySelector(`[data-remove]`).addEventListener("click", () => removeBuilderButton(i));
     list.appendChild(row);
   });
@@ -601,9 +613,7 @@ async function builderSubmit(doPost) {
   if (validButtons.length) {
     containerName = `__builder_${name}`;
     const items = validButtons.map(btn => ({
-      id:     Array.from(crypto.getRandomValues(new Uint8Array(4)))
-             .map(b => b.toString(16).padStart(2, '0'))
-             .join(''),
+      id:     btn.id,
       label:  btn.label.trim(),
       style:  btn.style,
       action: btn.action,
