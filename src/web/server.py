@@ -116,6 +116,16 @@ class DashboardServer:
         self.app.router.add_get("/api/guild/{guild_id}/state", self._handle_get_state)
         self.app.router.add_post("/api/guild/{guild_id}/actions/{action}", self._handle_action)
         self.app.router.add_get("/api/config", self._handle_public_config)
+        self.app.router.add_post("/api/guild/{guild_id}/twitch_chat", self._handle_set_twitch_chat)
+        self.app.router.add_get("/api/guild/{guild_id}/twitch_chat/shoutout_overrides", self._handle_get_shoutout_overrides)
+        self.app.router.add_post("/api/guild/{guild_id}/twitch_chat/shoutout_overrides", self._handle_add_shoutout_override)
+        self.app.router.add_delete("/api/guild/{guild_id}/twitch_chat/shoutout_overrides/{login}", self._handle_remove_shoutout_override)
+        self.app.router.add_get("/api/guild/{guild_id}/twitch_chat/commands", self._handle_get_twitch_cmds)
+        self.app.router.add_post("/api/guild/{guild_id}/twitch_chat/commands", self._handle_add_twitch_cmd)
+        self.app.router.add_delete("/api/guild/{guild_id}/twitch_chat/commands/{trigger}", self._handle_remove_twitch_cmd)
+        self.app.router.add_get("/api/guild/{guild_id}/messages", self._handle_list_messages)
+        self.app.router.add_post("/api/guild/{guild_id}/messages", self._handle_save_message)
+        self.app.router.add_post("/api/guild/{guild_id}/messages/{name}/send", self._handle_send_message)
 
     async def start(self) -> None:
         self._runner = web.AppRunner(self.app)
@@ -511,3 +521,176 @@ class DashboardServer:
             content_type = "text/css"
         with open(path, "r", encoding="utf-8") as file:
             return web.Response(text=file.read(), content_type=content_type)
+
+        async def _handle_get_twitch_chat(self, request: web.Request) -> web.Response:
+        auth = await self._authenticated_user(request)
+        if isinstance(auth, web.Response): return auth
+        token, user_id = auth
+        guild_id_str = request.match_info["guild_id"]
+        denied = await self._check_guild_access(token, user_id, guild_id_str)
+        if denied: return denied
+        from src.cogs.twitchchat.db import get_settings
+        settings = await get_settings(self.bot.db, int(guild_id_str))
+        return web.json_response(settings or {})
+ 
+    async def _handle_set_twitch_chat(self, request: web.Request) -> web.Response:
+        auth = await self._authenticated_user(request)
+        if isinstance(auth, web.Response): return auth
+        token, user_id = auth
+        guild_id_str = request.match_info["guild_id"]
+        denied = await self._check_guild_access(token, user_id, guild_id_str)
+        if denied: return denied
+        from src.cogs.twitchchat.db import upsert_settings
+        payload = await request.json()
+        await upsert_settings(self.bot.db, int(guild_id_str), **payload)
+        return web.json_response({"ok": True})
+ 
+    async def _handle_get_shoutout_overrides(self, request: web.Request) -> web.Response:
+        auth = await self._authenticated_user(request)
+        if isinstance(auth, web.Response): return auth
+        token, user_id = auth
+        guild_id_str = request.match_info["guild_id"]
+        denied = await self._check_guild_access(token, user_id, guild_id_str)
+        if denied: return denied
+        from src.cogs.twitchchat.db import list_shoutout_overrides
+        overrides = await list_shoutout_overrides(self.bot.db, int(guild_id_str))
+        return web.json_response(overrides)
+ 
+    async def _handle_add_shoutout_override(self, request: web.Request) -> web.Response:
+        auth = await self._authenticated_user(request)
+        if isinstance(auth, web.Response): return auth
+        token, user_id = auth
+        guild_id_str = request.match_info["guild_id"]
+        denied = await self._check_guild_access(token, user_id, guild_id_str)
+        if denied: return denied
+        from src.cogs.twitchchat.db import set_shoutout_override
+        payload = await request.json()
+        login = payload.get("twitch_login", "").strip()
+        message = payload.get("message", "").strip()
+        if not login or not message:
+            return web.json_response({"error": "twitch_login and message required"}, status=400)
+        await set_shoutout_override(self.bot.db, int(guild_id_str), login, message)
+        return web.json_response({"ok": True})
+ 
+    async def _handle_remove_shoutout_override(self, request: web.Request) -> web.Response:
+        auth = await self._authenticated_user(request)
+        if isinstance(auth, web.Response): return auth
+        token, user_id = auth
+        guild_id_str = request.match_info["guild_id"]
+        denied = await self._check_guild_access(token, user_id, guild_id_str)
+        if denied: return denied
+        from src.cogs.twitchchat.db import remove_shoutout_override
+        login = request.match_info["login"]
+        await remove_shoutout_override(self.bot.db, int(guild_id_str), login)
+        return web.json_response({"ok": True})
+ 
+    async def _handle_get_twitch_cmds(self, request: web.Request) -> web.Response:
+        auth = await self._authenticated_user(request)
+        if isinstance(auth, web.Response): return auth
+        token, user_id = auth
+        guild_id_str = request.match_info["guild_id"]
+        denied = await self._check_guild_access(token, user_id, guild_id_str)
+        if denied: return denied
+        from src.cogs.twitchchat.db import list_commands
+        cmds = await list_commands(self.bot.db, int(guild_id_str))
+        return web.json_response(cmds)
+ 
+    async def _handle_add_twitch_cmd(self, request: web.Request) -> web.Response:
+        auth = await self._authenticated_user(request)
+        if isinstance(auth, web.Response): return auth
+        token, user_id = auth
+        guild_id_str = request.match_info["guild_id"]
+        denied = await self._check_guild_access(token, user_id, guild_id_str)
+        if denied: return denied
+        from src.cogs.twitchchat.db import add_command
+        payload = await request.json()
+        trigger  = payload.get("trigger", "").strip()
+        template = payload.get("template", "").strip()
+        if not trigger or not template:
+            return web.json_response({"error": "trigger and template required"}, status=400)
+        kind = "random" if "{random}" in template else "text"
+        await add_command(self.bot.db, int(guild_id_str), trigger, template, kind,
+                          int(payload.get("min_roll", 0)), int(payload.get("max_roll", 100)))
+        return web.json_response({"ok": True})
+ 
+    async def _handle_remove_twitch_cmd(self, request: web.Request) -> web.Response:
+        auth = await self._authenticated_user(request)
+        if isinstance(auth, web.Response): return auth
+        token, user_id = auth
+        guild_id_str = request.match_info["guild_id"]
+        denied = await self._check_guild_access(token, user_id, guild_id_str)
+        if denied: return denied
+        from src.cogs.twitchchat.db import remove_command
+        trigger = request.match_info["trigger"]
+        await remove_command(self.bot.db, int(guild_id_str), trigger)
+        return web.json_response({"ok": True})
+ 
+    async def _handle_list_messages(self, request: web.Request) -> web.Response:
+        auth = await self._authenticated_user(request)
+        if isinstance(auth, web.Response): return auth
+        token, user_id = auth
+        guild_id_str = request.match_info["guild_id"]
+        denied = await self._check_guild_access(token, user_id, guild_id_str)
+        if denied: return denied
+        from src.cogs.messages.db import list_messages
+        msgs = await list_messages(self.bot.db, int(guild_id_str))
+        return web.json_response(msgs)
+ 
+    async def _handle_save_message(self, request: web.Request) -> web.Response:
+        auth = await self._authenticated_user(request)
+        if isinstance(auth, web.Response): return auth
+        token, user_id = auth
+        guild_id_str = request.match_info["guild_id"]
+        denied = await self._check_guild_access(token, user_id, guild_id_str)
+        if denied: return denied
+        from src.cogs.messages.db import upsert_message
+        payload = await request.json()
+        name      = str(payload.get("name", "")).strip()
+        content   = str(payload.get("content", "")).strip()
+        action    = str(payload.get("action", "none"))
+        container = payload.get("container") or None
+        if not name or not content:
+            return web.json_response({"error": "name and content required"}, status=400)
+        await upsert_message(
+            self.bot.db, int(guild_id_str), name, content, action,
+            0, "", container, int(user_id),
+        )
+        return web.json_response({"ok": True})
+ 
+    async def _handle_send_message(self, request: web.Request) -> web.Response:
+        auth = await self._authenticated_user(request)
+        if isinstance(auth, web.Response): return auth
+        token, user_id = auth
+        guild_id_str = request.match_info["guild_id"]
+        denied = await self._check_guild_access(token, user_id, guild_id_str)
+        if denied: return denied
+        import discord
+        from src.cogs.messages.db import get_message, set_posted
+        from src.data.button_containers import get_container
+        from src.cogs.messages.cog import build_container_view
+        from src.utils.ui import BaseLayout
+        guild_id = int(guild_id_str)
+        name     = request.match_info["name"]
+        payload  = await request.json()
+        channel_id = int(payload.get("channel_id", 0))
+        msg = await get_message(self.bot.db, guild_id, name)
+        if msg is None:
+            return web.json_response({"error": "message not found"}, status=404)
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            return web.json_response({"error": "guild not found"}, status=404)
+        channel = guild.get_channel(channel_id)
+        if not isinstance(channel, discord.TextChannel):
+            return web.json_response({"error": "channel not found or not a text channel"}, status=404)
+        layout = BaseLayout()
+        layout.add_container(discord.ui.TextDisplay(msg["content"]), accent_color=0x5865F2)
+        if msg.get("container_name"):
+            container = await get_container(self.bot.db, guild_id, msg["container_name"])
+            if container and container["items"]:
+                layout.add_item(build_container_view(guild_id, container))
+        try:
+            posted = await channel.send(view=layout)
+        except discord.HTTPException as exc:
+            return web.json_response({"error": str(exc)}, status=500)
+        await set_posted(self.bot.db, guild_id, name, channel_id, posted.id)
+        return web.json_response({"ok": True, "message_id": posted.id})

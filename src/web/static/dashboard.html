@@ -8,54 +8,234 @@
     <script>
       window.COCO_API_BASE = "https://flowerco.aichi.me";
     </script>
+    <style>
+      .session-bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .avatar-ring {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 2px solid var(--brown-dark);
+        object-fit: cover;
+        flex-shrink: 0;
+      }
+      .avatar-placeholder {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--brown);
+        flex-shrink: 0;
+      }
+
+      [data-panel-id] { display: none; }
+      [data-panel-id].active { display: block; }
+
+      .builder-wrap {
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        gap: 20px;
+        margin-top: 16px;
+      }
+      @media (max-width: 720px) {
+        .builder-wrap { grid-template-columns: 1fr; }
+      }
+
+      .builder-canvas {
+        background: var(--cream);
+        border: 3px solid var(--brown-dark);
+        padding: 20px;
+        min-height: 260px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .builder-preview-label {
+        font-family: var(--font-display);
+        font-size: 11px;
+        color: var(--ink-soft);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 4px;
+      }
+
+      .preview-container {
+        border-left: 4px solid var(--accent);
+        background: var(--paper);
+        padding: 14px 16px;
+        min-height: 60px;
+        font-size: 17px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .preview-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .preview-btn {
+        font-family: var(--font-display);
+        font-size: 11px;
+        padding: 8px 14px;
+        cursor: default;
+        border: none;
+      }
+      .preview-btn.primary { background: var(--accent); color: var(--paper); }
+      .preview-btn.secondary { background: var(--brown); color: var(--paper); }
+      .preview-btn.success { background: var(--good); color: var(--paper); }
+      .preview-btn.danger { background: var(--danger); color: var(--paper); }
+
+      .builder-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      /* ---- button item row ---- */
+      .btn-item-row {
+        display: grid;
+        grid-template-columns: 1fr 90px 120px 32px;
+        gap: 6px;
+        align-items: end;
+      }
+      @media (max-width: 500px) {
+        .btn-item-row { grid-template-columns: 1fr 1fr; }
+        .btn-item-row > *:last-child { grid-column: 1 / -1; }
+      }
+      .btn-item-row .remove-btn {
+        background: var(--danger);
+        color: var(--paper);
+        padding: 10px;
+        font-size: 16px;
+        font-family: var(--font-body);
+        line-height: 1;
+        width: 32px;
+        height: 38px;
+        box-shadow: none;
+      }
+      #btn-list { display: flex; flex-direction: column; gap: 8px; }
+
+      /* ---- shoutout override list ---- */
+      .override-row {
+        display: grid;
+        grid-template-columns: 120px 1fr 32px;
+        gap: 6px;
+        align-items: end;
+      }
+      #shoutout-override-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+
+      /* ---- custom commands list ---- */
+      .cmd-row {
+        display: grid;
+        grid-template-columns: 100px 1fr 32px;
+        gap: 6px;
+        align-items: end;
+      }
+      #cmd-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+
+      /* ---- toast ---- */
+      #toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: var(--brown-dark);
+        color: var(--paper);
+        font-family: var(--font-display);
+        font-size: 12px;
+        padding: 12px 18px;
+        box-shadow: 4px 4px 0 rgba(0,0,0,.25);
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity .2s, transform .2s;
+        pointer-events: none;
+        z-index: 100;
+        max-width: 280px;
+      }
+      #toast.show { opacity: 1; transform: translateY(0); }
+      #toast.ok { background: var(--good); }
+      #toast.err { background: var(--danger); }
+
+      /* ---- info note ---- */
+      .info-note {
+        background: var(--cream-deep);
+        border-left: 4px solid var(--accent-soft);
+        padding: 10px 14px;
+        font-size: 16px;
+        color: var(--ink-soft);
+        margin-top: 4px;
+      }
+
+      /* ---- panel sub-sections ---- */
+      .sub-section {
+        margin-top: 22px;
+        padding-top: 16px;
+        border-top: 2px dashed var(--cream-deep);
+      }
+      .sub-section h3 { margin-bottom: 10px; }
+    </style>
   </head>
   <body>
+    <div id="toast"></div>
     <div class="page-shell">
       <div class="diamond-rail left"></div>
       <div class="diamond-rail right"></div>
       <div class="page-inner">
+
         <header class="topbar">
           <div class="brand">
             <span class="brand-mark"></span>
             <span class="brand-name">coco</span>
           </div>
           <nav class="nav-links">
-            <span id="guild-name">no server selected</span>
-            <button id="logout-button" class="button button-secondary">sign out</button>
+            <div class="session-bar" id="session-bar" hidden>
+              <img class="avatar-ring" id="user-avatar" src="" alt="" />
+              <span id="guild-name">no server selected</span>
+            </div>
+            <span id="guild-name-anon" class="nav-links"></span>
+            <a href="/" class="button button-tertiary" id="login-link" hidden>log in</a>
+            <button id="logout-button" class="button button-secondary" hidden>sign out</button>
           </nav>
         </header>
 
+        <!-- signed-out -->
+        <section class="panel" id="signed-out-panel">
+          <p class="eyebrow">not signed in</p>
+          <h2>log in to manage your servers</h2>
+          <div class="button-row">
+            <a class="button button-primary" href="/" id="goto-login">go to home page to log in</a>
+          </div>
+        </section>
+
+        <!-- tabs (hidden until logged in) -->
         <nav class="dash-tabs" id="dash-tabs" hidden>
           <button class="dash-tab" data-panel="servers">servers</button>
           <button class="dash-tab" data-panel="config">settings</button>
           <button class="dash-tab" data-panel="moderation">moderation</button>
           <button class="dash-tab" data-panel="tickets">tickets</button>
-          <button class="dash-tab" data-panel="containers">buttons</button>
+          <button class="dash-tab" data-panel="twitch">twitch</button>
+          <button class="dash-tab" data-panel="builder">messages</button>
           <button class="dash-tab" data-panel="actions">actions</button>
         </nav>
 
-        <section class="panel" id="signed-out-panel">
-          <p class="eyebrow">not signed in</p>
-          <h2>log in from the home page first</h2>
-          <a class="button button-primary" href="/">go to home</a>
-        </section>
-
-        <section class="panel" data-panel-id="servers" hidden>
+        <!-- servers -->
+        <section class="panel" data-panel-id="servers">
           <div class="panel-title-row">
-            <div>
-              <p class="eyebrow">server selector</p>
-              <h2>choose a server</h2>
-            </div>
+            <div><p class="eyebrow">server selector</p><h2>choose a server</h2></div>
           </div>
           <div class="grid-list" id="guild-list"></div>
         </section>
 
-        <section class="panel" data-panel-id="config" hidden>
+        <!-- config / settings -->
+        <section class="panel" data-panel-id="config">
           <div class="panel-title-row">
-            <div>
-              <p class="eyebrow">config</p>
-              <h2>server settings</h2>
-            </div>
+            <div><p class="eyebrow">config</p><h2>server settings</h2></div>
           </div>
           <div class="config-grid" id="config-fields">
             <div class="field-group" data-field="moderator_role"><label>moderator role</label><select></select></div>
@@ -63,103 +243,182 @@
             <div class="field-group" data-field="member_role"><label>member role</label><select></select></div>
             <div class="field-group" data-field="image_role"><label>image perms role</label><select></select></div>
             <div class="field-group" data-field="music_role"><label>music role</label><select></select></div>
-            <div class="field-group wide" data-field="ticket_channel"><label>ticket panel channel</label><select></select></div>
-            <div class="field-group wide" data-field="ticket_message"><label>ticket reason message</label><input type="text" placeholder="ticket reason template" /></div>
             <div class="field-group wide" data-field="announcement_channel"><label>announcement channel</label><select></select></div>
             <div class="field-group wide" data-field="announcement_role"><label>announcement ping role</label><select></select></div>
             <div class="field-group wide" data-field="join_channel"><label>join channel</label><select></select></div>
-            <div class="field-group wide" data-field="join_messages"><label>join messages (one per line, {user} and {mention} work)</label><textarea rows="3" placeholder="welcome to the server, {user}!"></textarea></div>
+            <div class="field-group wide" data-field="join_messages"><label>join messages (one per line — {user}, {mention}, {server})</label><textarea rows="3" placeholder="welcome to the server, {user}!"></textarea></div>
             <div class="field-group wide" data-field="leave_channel"><label>leave channel</label><select></select></div>
             <div class="field-group wide" data-field="leave_messages"><label>leave messages (one per line)</label><textarea rows="3" placeholder="{user} left the server."></textarea></div>
             <div class="field-group wide checkbox-row" data-field="widget_enabled"><label><input type="checkbox" /> show server widget on this dashboard</label></div>
           </div>
-          <div id="widget-preview"></div>
+          <div id="widget-preview" style="margin-top:14px"></div>
           <div class="button-row">
             <button id="save-config" class="button button-primary">save settings</button>
           </div>
         </section>
 
-        <section class="panel" data-panel-id="tickets" hidden>
+        <!-- moderation -->
+        <section class="panel" data-panel-id="moderation">
           <div class="panel-title-row">
-            <div>
-              <p class="eyebrow">ticket panels</p>
-              <h2>manage ticket panel</h2>
-            </div>
-          </div>
-          <div class="config-grid">
-            <div class="field-group wide"><label>panel channel</label><select id="ticket-panel-channel"></select></div>
-            <div class="field-group wide"><label>staff role (pinged + auto-added to every ticket)</label><select id="ticket-panel-staff-role"></select></div>
-            <div class="field-group wide"><label>panel title</label><input id="ticket-panel-title" type="text" placeholder="support" /></div>
-            <div class="field-group wide"><label>panel description</label><input id="ticket-panel-description" type="text" placeholder="click below to open a ticket" /></div>
-            <div class="field-group wide"><label>existing panels</label><div id="ticket-panels-list" class="list-box"></div></div>
-          </div>
-          <div class="button-row">
-            <button id="create-ticket-panel" class="button button-primary">create ticket panel</button>
-          </div>
-        </section>
-
-        <section class="panel" data-panel-id="containers" hidden>
-          <div class="panel-title-row">
-            <div>
-              <p class="eyebrow">button containers</p>
-              <h2>manage containers</h2>
-            </div>
-          </div>
-          <div class="config-grid">
-            <div class="field-group wide"><label>container name</label><input id="container-name" type="text" placeholder="help buttons" /></div>
-            <div class="field-group wide"><label>accent color</label><input id="container-accent" type="text" placeholder="16777215 or 0xFFAABB" /></div>
-            <div class="field-group wide"><label>container items (JSON array)</label><textarea id="container-items" rows="6" placeholder='[{"label":"open","action":"open_ticket"}]'></textarea></div>
-            <div class="field-group wide"><label>saved containers</label><div id="container-list" class="list-box"></div></div>
-          </div>
-          <div class="button-row">
-            <button id="save-container" class="button button-primary">save container</button>
-          </div>
-        </section>
-
-        <section class="panel" data-panel-id="moderation" hidden>
-          <div class="panel-title-row">
-            <div>
-              <p class="eyebrow">moderation</p>
-              <h2>moderation settings</h2>
-            </div>
+            <div><p class="eyebrow">moderation</p><h2>moderation settings</h2></div>
           </div>
           <div class="config-grid" id="moderation-fields">
             <div class="field-group" data-field="mute_channel"><label>mute log channel</label><select></select></div>
-            <div class="field-group checkbox-row" data-field="lockdown_include_member_role"><label><input type="checkbox" /> lockdowns also silence the member role</label></div>
+            <div class="field-group wide checkbox-group" data-field="lockdown_include_member_role"><label><input type="checkbox" /> lockdowns also silence the member role</label></div>
             <div class="field-group wide checkbox-group" data-field="require_confirm"><label><input type="checkbox" /> require confirmation before mod actions</label></div>
-            <div class="field-group wide" data-field="warn_dm"><label>warn - dm message (one per line, picked at random)</label><textarea rows="2"></textarea></div>
-            <div class="field-group wide" data-field="warn_channel"><label>warn - channel message</label><textarea rows="2"></textarea></div>
-            <div class="field-group wide" data-field="kick_dm"><label>kick - dm message</label><textarea rows="2"></textarea></div>
-            <div class="field-group wide" data-field="kick_channel"><label>kick - channel message</label><textarea rows="2"></textarea></div>
-            <div class="field-group wide" data-field="ban_dm"><label>ban - dm message</label><textarea rows="2"></textarea></div>
-            <div class="field-group wide" data-field="ban_channel"><label>ban - channel message</label><textarea rows="2"></textarea></div>
-            <div class="field-group wide" data-field="mute_dm"><label>mute - dm message</label><textarea rows="2"></textarea></div>
-            <div class="field-group wide" data-field="mute_channel_msg"><label>mute - channel message</label><textarea rows="2"></textarea></div>
+            <div class="field-group wide" data-field="warn_dm"><label>warn — dm (one per line, picked randomly)</label><textarea rows="2"></textarea></div>
+            <div class="field-group wide" data-field="warn_channel"><label>warn — channel message</label><textarea rows="2"></textarea></div>
+            <div class="field-group wide" data-field="kick_dm"><label>kick — dm</label><textarea rows="2"></textarea></div>
+            <div class="field-group wide" data-field="kick_channel"><label>kick — channel message</label><textarea rows="2"></textarea></div>
+            <div class="field-group wide" data-field="ban_dm"><label>ban — dm</label><textarea rows="2"></textarea></div>
+            <div class="field-group wide" data-field="ban_channel"><label>ban — channel message</label><textarea rows="2"></textarea></div>
+            <div class="field-group wide" data-field="mute_dm"><label>mute — dm</label><textarea rows="2"></textarea></div>
+            <div class="field-group wide" data-field="mute_channel_msg"><label>mute — channel message</label><textarea rows="2"></textarea></div>
           </div>
           <div class="button-row">
             <button id="save-moderation" class="button button-primary">save moderation settings</button>
           </div>
         </section>
 
-        <section class="panel" data-panel-id="actions" hidden>
+        <!-- tickets -->
+        <section class="panel" data-panel-id="tickets">
           <div class="panel-title-row">
-            <div>
-              <p class="eyebrow">actions</p>
-              <h2>button actions</h2>
+            <div><p class="eyebrow">ticketing</p><h2>ticket panels</h2></div>
+          </div>
+          <div class="info-note">a ticket panel is a message with an "open ticket" button. members click it to create a private thread.</div>
+          <div class="config-grid" style="margin-top:14px">
+            <div class="field-group wide"><label>panel channel (where the button is posted)</label><select id="ticket-panel-channel"></select></div>
+            <div class="field-group wide"><label>staff role (pinged and auto-added to every new ticket)</label><select id="ticket-panel-staff-role"></select></div>
+            <div class="field-group wide"><label>panel title</label><input id="ticket-panel-title" type="text" placeholder="support" /></div>
+            <div class="field-group wide"><label>panel description</label><input id="ticket-panel-description" type="text" placeholder="click below to open a ticket" /></div>
+          </div>
+          <div class="button-row">
+            <button id="create-ticket-panel" class="button button-primary">post ticket panel</button>
+          </div>
+          <div class="sub-section">
+            <h3>existing panels</h3>
+            <div id="ticket-panels-list" class="list-box"></div>
+          </div>
+        </section>
+
+        <!-- twitch -->
+        <section class="panel" data-panel-id="twitch">
+          <div class="panel-title-row">
+            <div><p class="eyebrow">twitch</p><h2>twitch chat settings</h2></div>
+          </div>
+          <div class="info-note">these settings control the chat bot in your twitch channel. run <code>/twitchchat setup &lt;channel&gt;</code> first to connect.</div>
+
+          <div class="sub-section">
+            <h3>shoutout message</h3>
+            <p style="font-size:16px;color:var(--ink-soft);margin:0 0 8px">default message sent by !so. placeholders: {user} {game} {url}</p>
+            <div class="field-group wide">
+              <textarea id="shoutout-message" rows="3" placeholder="{user} was last live playing {game} - go give them a follow at {url}!"></textarea>
+            </div>
+            <div class="button-row">
+              <button id="save-shoutout-msg" class="button button-primary">save shoutout message</button>
             </div>
           </div>
+
+          <div class="sub-section">
+            <h3>per-streamer shoutout overrides</h3>
+            <p style="font-size:16px;color:var(--ink-soft);margin:0 0 8px">custom !so messages for specific twitch users.</p>
+            <div id="shoutout-override-list"></div>
+            <div class="override-row" style="margin-top:8px">
+              <div class="field-group"><label>twitch username</label><input id="new-override-user" type="text" placeholder="streamer" /></div>
+              <div class="field-group"><label>message ({user} {game} {url})</label><input id="new-override-msg" type="text" placeholder="go follow {user} at {url}!" /></div>
+              <div class="field-group"><label>&nbsp;</label><button id="add-override" class="button button-secondary">add</button></div>
+            </div>
+          </div>
+
+          <div class="sub-section">
+            <h3>custom chat commands</h3>
+            <p style="font-size:16px;color:var(--ink-soft);margin:0 0 8px">commands anyone (or just subs) can type in twitch chat. use {random} to roll a number, {user} for the chatter, {arg} for anything they type after the command.</p>
+            <div id="cmd-list"></div>
+            <div class="cmd-row" style="margin-top:8px">
+              <div class="field-group"><label>!trigger</label><input id="new-cmd-trigger" type="text" placeholder="!luck" /></div>
+              <div class="field-group"><label>response template</label><input id="new-cmd-template" type="text" placeholder="{user} has {random}% luck" /></div>
+              <div class="field-group"><label>&nbsp;</label><button id="add-cmd" class="button button-secondary">add</button></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- message builder -->
+        <section class="panel" data-panel-id="builder">
+          <div class="panel-title-row">
+            <div><p class="eyebrow">message builder</p><h2>design a message</h2></div>
+          </div>
+          <div class="info-note">build a message with optional buttons, then post it to any channel. what you see is what gets posted.</div>
+
+          <div class="builder-wrap">
+            <!-- left: controls -->
+            <div class="builder-controls">
+              <div class="field-group wide">
+                <label>message name (internal reference)</label>
+                <input id="builder-name" type="text" placeholder="rules, welcome, etc." />
+              </div>
+              <div class="field-group wide">
+                <label>message text (markdown-ish, \n for line breaks)</label>
+                <textarea id="builder-content" rows="5" placeholder="**welcome!** here are our rules..."></textarea>
+              </div>
+              <div class="field-group">
+                <label>accent color (hex)</label>
+                <input id="builder-accent" type="text" placeholder="#5865F2" value="#5865F2" />
+              </div>
+
+              <div class="sub-section" style="margin-top:10px;padding-top:10px">
+                <h3>buttons</h3>
+                <div id="btn-list"></div>
+                <div style="margin-top:10px">
+                  <button id="add-btn" class="button button-secondary" style="font-size:13px">+ add button</button>
+                </div>
+              </div>
+
+              <div class="sub-section" style="margin-top:10px;padding-top:10px">
+                <h3>post to channel</h3>
+                <div class="field-group wide">
+                  <label>channel</label>
+                  <select id="builder-channel"></select>
+                </div>
+                <div class="button-row">
+                  <button id="builder-post" class="button button-primary">post message</button>
+                  <button id="builder-save" class="button button-secondary">save without posting</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- right: live preview -->
+            <div>
+              <p class="builder-preview-label">live preview</p>
+              <div class="builder-canvas">
+                <div class="preview-container" id="preview-text">your message will appear here</div>
+                <div class="preview-buttons" id="preview-btns"></div>
+              </div>
+              <p style="font-size:14px;color:var(--ink-soft);margin-top:8px">colors are approximate — discord renders its own accent styling.</p>
+            </div>
+          </div>
+
+          <div class="sub-section">
+            <h3>saved messages</h3>
+            <div id="saved-messages-list" class="list-box"></div>
+          </div>
+        </section>
+
+        <!-- actions -->
+        <section class="panel" data-panel-id="actions">
+          <div class="panel-title-row">
+            <div><p class="eyebrow">actions</p><h2>music &amp; bot controls</h2></div>
+          </div>
           <div class="grid-list">
-            <button class="tile-action button button-tertiary" data-action="play">play a song</button>
-            <button class="tile-action button button-tertiary" data-action="pause">pause song</button>
-            <button class="tile-action button button-tertiary" data-action="resume">resume song</button>
-            <button class="tile-action button button-tertiary" data-action="skip">skip track</button>
-            <button class="tile-action button button-tertiary" data-action="stop">stop music</button>
-            <button class="tile-action button button-tertiary" data-action="open_twitch">open twitch url</button>
+            <button class="tile-action button button-tertiary" data-action="play">▶ play a song</button>
+            <button class="tile-action button button-tertiary" data-action="pause">⏸ pause</button>
+            <button class="tile-action button button-tertiary" data-action="resume">⏯ resume</button>
+            <button class="tile-action button button-tertiary" data-action="skip">⏭ skip track</button>
+            <button class="tile-action button button-tertiary" data-action="stop">⏹ stop &amp; disconnect</button>
           </div>
         </section>
 
         <footer class="footer-credit">
-          created by <span class="pixel-avatar"></span>
+          created by <span class="pixel-avatar"></span> <a href="https://flowerco.aichi.me">flowerco</a>
         </footer>
       </div>
     </div>
