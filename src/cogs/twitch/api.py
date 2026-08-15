@@ -10,10 +10,6 @@ log = get_logger("twitch.api")
 
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID", "")
 TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET", "")
-
-
-
-
 TWITCH_WEBHOOK_SECRET = os.getenv("TWITCH_WEBHOOK_SECRET", "")
 TWITCH_WEBHOOK_CALLBACK_URL = os.getenv("TWITCH_WEBHOOK_CALLBACK_URL", "")
 
@@ -46,6 +42,13 @@ class TwitchClient:
             },
         )
         data = await resp.json()
+        if resp.status != 200 or "access_token" not in data:
+            log.error(
+                "twitch token request failed (status %s): %s",
+                resp.status,
+                data.get("message", data),
+            )
+            raise RuntimeError(f"twitch app token request failed: {data.get('message', resp.status)}")
         self._token = data["access_token"]
         return self._token
 
@@ -152,15 +155,7 @@ class TwitchClient:
         return int(data.get("total", 0))
 
     async def subscribe_to_stream_online_ws(self, broadcaster_user_id: str, session_id: str) -> str | None:
-        """subscribe using websocket transport - the subscription is delivered to
-        the eventsub websocket connection identified by `session_id`, no public
-        callback url involved.
 
-        note: with an app access token, websocket transport only delivers
-        events for broadcasters who have authorized this app (e.g. via a user
-        OAuth flow). in practice that limits this to your own channel unless
-        every tracked streamer separately authorizes the app. use
-        subscribe_to_stream_online_webhook for tracking arbitrary streamers."""
         resp = await self._request(
             "POST",
             "https://api.twitch.tv/helix/eventsub/subscriptions",
@@ -180,10 +175,7 @@ class TwitchClient:
     async def subscribe_to_stream_online_webhook(
         self, broadcaster_user_id: str, callback_url: str, secret: str
     ) -> str | None:
-        """subscribe using webhook transport - twitch POSTs events to
-        `callback_url` (must be a public https url), signed with `secret`.
-        works for any broadcaster, no per-user OAuth needed, since this uses
-        an app access token."""
+
         resp = await self._request(
             "POST",
             "https://api.twitch.tv/helix/eventsub/subscriptions",
