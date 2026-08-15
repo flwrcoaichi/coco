@@ -607,7 +607,7 @@ async function builderSubmit(doPost) {
       label:  btn.label.trim(),
       style:  btn.style,
       action: btn.action,
-      data:   { role_id: parseInt(btn.roleId) },
+      data:   { role_id: btn.roleId },
     }));
     const accentInt = /^#?[0-9a-fA-F]{6}$/.test(accent)
       ? parseInt(accent.replace("#",""), 16) : 0x5865F2;
