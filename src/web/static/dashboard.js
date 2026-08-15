@@ -582,10 +582,76 @@ async function loadSavedMessages() {
     const card = document.createElement("div");
     card.className = "panel-card";
     const posted = m.message_id ? `posted in <code>${m.channel_id}</code>` : "not posted yet";
-    card.innerHTML = `<strong>${escHtml(m.name)}</strong> — ${posted}
-      <div style="font-size:14px;margin-top:4px;color:var(--ink-soft)">${escHtml((m.content||"").substring(0,80))}${m.content?.length>80?"…":""}</div>`;
+    const preview = (m.content||"").substring(0,80);
+    card.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:start;gap:10px">
+        <div style="flex:1">
+          <strong>${escHtml(m.name)}</strong> — ${posted}
+          <div style="font-size:14px;margin-top:4px;color:var(--ink-soft)">${escHtml(preview)}${m.content?.length>80?"…":""}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="button button-secondary" style="font-size:12px;padding:8px 10px" onclick="copyMessage('${escAttr(m.name)}')">copy</button>
+          <button class="button button-secondary" style="font-size:12px;padding:8px 10px" onclick="editMessage('${escAttr(m.name)}')">edit</button>
+          <button class="button button-danger" style="font-size:12px;padding:8px 10px" onclick="deleteMessage('${escAttr(m.name)}')">delete</button>
+        </div>
+      </div>
+    `;
     list.appendChild(card);
   });
+}
+
+async function copyMessage(name) {
+  if (!state.guild) return;
+  const msgs = await api(`/api/guild/${state.guild.id}/messages`);
+  const msg = msgs.find(m => m.name === name);
+  if (!msg) { toast("message not found", "err"); return; }
+  builderButtons = [];
+  document.getElementById("builder-name").value = name + "_copy";
+  document.getElementById("builder-content").value = msg.content;
+  document.getElementById("builder-accent").value = "#5865F2";
+  document.getElementById("builder-channel").value = "";
+  renderBtnList();
+  renderBuilderPreview();
+  showPanel("builder");
+  toast("copied to builder (edit the name before saving)");
+}
+
+async function editMessage(name) {
+  if (!state.guild) return;
+  const msgs = await api(`/api/guild/${state.guild.id}/messages`);
+  const msg = msgs.find(m => m.name === name);
+  if (!msg) { toast("message not found", "err"); return; }
+  
+  const newContent = prompt("edit message content:", msg.content);
+  if (newContent === null) return;
+  
+  const result = await api(`/api/guild/${state.guild.id}/messages/${encodeURIComponent(name)}`, {
+    method: "PUT",
+    body: JSON.stringify({ content: newContent }),
+  });
+  
+  if (result?.ok) {
+    toast("message updated");
+    loadSavedMessages();
+  } else {
+    toast(result?.error || "failed to update", "err");
+  }
+}
+
+async function deleteMessage(name) {
+  if (!state.guild) return;
+  if (!confirm(`delete message "${name}"?`)) return;
+  
+  const result = await api(`/api/guild/${state.guild.id}/messages/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+  
+  if (result?.ok) {
+    toast("message deleted");
+    loadSavedMessages();
+  } else {
+    toast(result?.error || "failed to delete", "err");
+  }
 }
 
 async function builderPost() {

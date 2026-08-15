@@ -126,6 +126,8 @@ class DashboardServer:
         self.app.router.add_get("/api/guild/{guild_id}/messages", self._handle_list_messages)
         self.app.router.add_post("/api/guild/{guild_id}/messages", self._handle_save_message)
         self.app.router.add_post("/api/guild/{guild_id}/messages/{name}/send", self._handle_send_message)
+        self.app.router.add_put("/api/guild/{guild_id}/messages/{name}", self._handle_update_message)
+        self.app.router.add_delete("/api/guild/{guild_id}/messages/{name}", self._handle_delete_message)
 
     async def start(self) -> None:
         self._runner = web.AppRunner(self.app)
@@ -694,3 +696,38 @@ class DashboardServer:
             return web.json_response({"error": str(exc)}, status=500)
         await set_posted(self.bot.db, guild_id, name, channel_id, posted.id)
         return web.json_response({"ok": True, "message_id": posted.id})
+    
+    async def _handle_update_message(self, request: web.Request) -> web.Response:
+        auth = await self._authenticated_user(request)
+        if isinstance(auth, web.Response): return auth
+        token, user_id = auth
+        guild_id_str = request.match_info["guild_id"]
+        denied = await self._check_guild_access(token, user_id, guild_id_str)
+        if denied: return denied
+        from src.cogs.messages.db import upsert_message, get_message
+        guild_id = int(guild_id_str)
+        name = request.match_info["name"]
+        msg = await get_message(self.bot.db, guild_id, name)
+        if msg is None:
+            return web.json_response({"error": "message not found"}, status=404)
+        payload = await request.json()
+        content   = payload.get("content", msg["content"])
+        container = payload.get("container", msg["container_name"])
+        await upsert_message(
+            self.bot.db, guild_id, name, content, msg["action"],
+            msg["action_role_id"], msg["action_emoji"], container, int(user_id),
+        )
+        return web.json_response({"ok": True})
+
+    async def _handle_delete_message(self, request: web.Request) -> web.Response:
+        auth = await self._authenticated_user(request)
+        if isinstance(auth, web.Response): return auth
+        token, user_id = auth
+        guild_id_str = request.match_info["guild_id"]
+        denied = await self._check_guild_access(token, user_id, guild_id_str)
+        if denied: return denied
+        from src.cogs.messages.db import delete_message
+        guild_id = int(guild_id_str)
+        name = request.match_info["name"]
+        await delete_message(self.bot.db, guild_id, name)
+        return web.json_response({"ok": True})
