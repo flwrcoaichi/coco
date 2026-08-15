@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <title>coco - dashboard</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/static/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script>
-      window.COCO_API_BASE = "https://flowerco.aichi.me";
+      window.COCO_API_BASE = "";
     </script>
   </head>
   <body>
@@ -88,8 +88,7 @@
           </div>
           <div class="config-grid">
             <div class="field-group wide"><label>panel channel</label><select id="ticket-panel-channel"></select></div>
-            <div class="field-group wide"><label>panel category</label><select id="ticket-panel-category"></select></div>
-            <div class="field-group wide"><label>staff role</label><select id="ticket-panel-staff-role"></select></div>
+            <div class="field-group wide"><label>staff role (pinged + auto-added to every ticket)</label><select id="ticket-panel-staff-role"></select></div>
             <div class="field-group wide"><label>panel title</label><input id="ticket-panel-title" type="text" placeholder="support" /></div>
             <div class="field-group wide"><label>panel description</label><input id="ticket-panel-description" type="text" placeholder="click below to open a ticket" /></div>
             <div class="field-group wide"><label>existing panels</label><div id="ticket-panels-list" class="list-box"></div></div>
@@ -160,10 +159,10 @@
         </section>
 
         <footer class="footer-credit">
-          created by <span class="pixel-avatar"></span> <a href="https://flowerco.aichi.me" id="source-link-footer">flowerco</a>
+          created by <span class="pixel-avatar"></span>
         </footer>
       </div>
     </div>
-    <script src="/dashboard.js"></script>
+    <script src="/static/dashboard.js"></script>
   </body>
 </html>

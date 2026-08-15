@@ -3,17 +3,27 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from src.cogs.twitch.api import TWITCH_WEBHOOK_SECRET
 from src.cogs.twitch.db import (
     add_streamer,
+    get_redeem_action,
+    get_redeem_auth,
+    get_redeem_auth_by_broadcaster,
     get_streamer,
     get_streamer_by_username,
+    list_redeem_actions,
+    remove_redeem_action,
     remove_streamer,
+    set_redeem_action,
+    set_redeem_subscription_id,
     update_streamer,
 )
 from src.cogs.twitch.notifications import send_live_notification
+from src.cogs.twitch.redeem_actions import handle_redemption
+from src.cogs.twitch.redeem_auth import RedeemAuthServer, get_valid_broadcaster_token
 from src.cogs.twitch.webserver import TwitchWebhookServer
 from src.utils.logger import get_logger
 
@@ -299,9 +309,17 @@ class TwitchCog(commands.Cog, name="twitch"):
     def __init__(self, bot: "Bot") -> None:
         self.bot = bot
         self.webhook_server = TwitchWebhookServer(
-            self._on_stream_online,
+            {
+                "stream.online": self._on_stream_online_event,
+                "channel.channel_points_custom_reward_redemption.add": self._on_redemption_event,
+            },
             host=bot.config.twitch_webhook_host,
             port=bot.config.twitch_webhook_port,
+        )
+        self.redeem_auth_server = RedeemAuthServer(
+            bot,
+            host=bot.config.twitch_redeem_auth_host,
+            port=bot.config.twitch_redeem_auth_port,
         )
 
     async def cog_load(self) -> None:
@@ -315,16 +333,35 @@ class TwitchCog(commands.Cog, name="twitch"):
             await self.webhook_server.start()
         else:
             log.info("twitch webhook listener disabled by configuration")
+        if self.bot.config.twitch_redeem_auth_enabled:
+            await self.redeem_auth_server.start()
 
     async def cog_unload(self) -> None:
         await self.webhook_server.stop()
+        await self.redeem_auth_server.stop()
         await self.bot.twitch.close()
 
-    async def _on_stream_online(self, broadcaster_id: str) -> None:
+    async def _on_stream_online_event(self, event: dict[str, object]) -> None:
+        broadcaster_id = str(event["broadcaster_user_id"])
         try:
             await send_live_notification(self.bot, broadcaster_id)
         except Exception:
             log.exception("failed to send live notification for %s", broadcaster_id)
+
+    async def _on_redemption_event(self, event: dict[str, object]) -> None:
+        broadcaster_id = str(event["broadcaster_user_id"])
+        auth = await get_redeem_auth_by_broadcaster(self.bot.db, broadcaster_id)
+        if auth is None:
+            return
+        reward = event.get("reward")
+        reward_title = str(reward["title"]) if isinstance(reward, dict) else ""
+        user_login = str(event.get("user_login", ""))
+        if not reward_title or not user_login:
+            return
+        try:
+            await handle_redemption(self.bot, int(auth["guild_id"]), user_login, reward_title)
+        except Exception:
+            log.exception("failed to handle redemption '%s' for guild %s", reward_title, auth["guild_id"])
 
     @commands.hybrid_command(name="setup", description="track a twitch streamer in this channel")
     @commands.has_permissions(manage_guild=True)
@@ -412,6 +449,117 @@ class TwitchCog(commands.Cog, name="twitch"):
             return
         await send_live_notification(self.bot, str(streamer["twitch_user_id"]))
         await ctx.send("test sent", delete_after=5)
+
+    redeem = app_commands.Group(
+        name="twitchredeem",
+        description="trigger discord actions from twitch channel point redeems",
+        default_permissions=discord.Permissions(manage_guild=True),
+    )
+
+    @redeem.command(name="authorize", description="connect your own twitch account so coco can read your channel point rewards")
+    async def redeem_authorize(self, interaction: discord.Interaction) -> None:
+        if interaction.guild is None:
+            return
+        if not self.bot.config.twitch_redeem_auth_enabled:
+            await interaction.response.send_message("redeem auth is disabled on this instance", ephemeral=True)
+            return
+        if not self.bot.config.twitch_redeem_auth_public_url:
+            await interaction.response.send_message(
+                "TWITCH_REDEEM_AUTH_PUBLIC_URL isn't configured on this instance - ask whoever hosts this bot to set it",
+                ephemeral=True,
+            )
+            return
+        url = f"{self.bot.config.twitch_redeem_auth_public_url}/auth/twitch/redeems?guild_id={interaction.guild.id}"
+        await interaction.response.send_message(
+            "this link will authorize your account to read your channel point rewards and set up actions for them!"
+            f" `/twitchredeem list`:\n{url}",
+            ephemeral=True,
+        )
+
+    @redeem.command(name="list", description="list your channel point rewards and set up eventsub for them")
+    async def redeem_list(self, interaction: discord.Interaction) -> None:
+        if interaction.guild is None:
+            return
+        await interaction.response.defer(ephemeral=True)
+        guild_id = interaction.guild.id
+        token = await get_valid_broadcaster_token(self.bot, guild_id)
+        auth = await get_redeem_auth(self.bot.db, guild_id)
+        if token is None or auth is None:
+            await interaction.followup.send("run `/twitchredeem authorize` first", ephemeral=True)
+            return
+
+        if not auth["subscription_id"] and self.bot.config.twitch_webhook_callback_url:
+            sub_id = await self.bot.twitch.subscribe_to_redemption_webhook(
+                str(auth["broadcaster_id"]), self.bot.config.twitch_webhook_callback_url, TWITCH_WEBHOOK_SECRET
+            )
+            if sub_id:
+                await set_redeem_subscription_id(self.bot.db, guild_id, sub_id)
+
+        rewards = await self.bot.twitch.list_custom_rewards(str(auth["broadcaster_id"]), token)
+        if not rewards:
+            await interaction.followup.send("no channel point rewards found on your channel", ephemeral=True)
+            return
+        lines = [f"- **{r['title']}**" for r in rewards]
+        await interaction.followup.send(
+            "your rewards (use the exact title with `/twitchredeem setaction`):\n" + "\n".join(lines),
+            ephemeral=True,
+        )
+
+    @redeem.command(name="setaction", description="make a redeem give currency, grant a role, or open a ticket")
+    @app_commands.describe(
+        reward_title="exact reward title from /twitchredeem list",
+        action="what happens when it's redeemed",
+        currency_amount="coins to give (currency action only)",
+        role="role to grant (role action only)",
+        ticket_panel_id="ticket panel id to open against (ticket action only, see /ticket panel)",
+    )
+    @app_commands.choices(
+        action=[
+            app_commands.Choice(name="give currency", value="currency"),
+            app_commands.Choice(name="grant role", value="role"),
+            app_commands.Choice(name="open ticket", value="ticket"),
+        ]
+    )
+    async def redeem_setaction(
+        self,
+        interaction: discord.Interaction,
+        reward_title: str,
+        action: app_commands.Choice[str],
+        currency_amount: int | None = None,
+        role: discord.Role | None = None,
+        ticket_panel_id: int | None = None,
+    ) -> None:
+        if interaction.guild is None:
+            return
+        value_map = {"currency": currency_amount, "role": role.id if role else None, "ticket": ticket_panel_id}
+        value = value_map[action.value]
+        if value is None:
+            await interaction.response.send_message(
+                f"the `{action.value}` action needs its matching option filled in", ephemeral=True
+            )
+            return
+        await set_redeem_action(self.bot.db, interaction.guild.id, reward_title, action.value, str(value))
+        await interaction.response.send_message(
+            f"redeeming **{reward_title}** (by a linked account) will now: {action.name}", ephemeral=True
+        )
+
+    @redeem.command(name="removeaction", description="remove a redeem's configured action")
+    async def redeem_removeaction(self, interaction: discord.Interaction, reward_title: str) -> None:
+        if interaction.guild is None:
+            return
+        await remove_redeem_action(self.bot.db, interaction.guild.id, reward_title)
+        await interaction.response.send_message(f"removed the action for **{reward_title}**", ephemeral=True)
+
+    @redeem.command(name="actions", description="list configured redeem actions")
+    async def redeem_actions_list(self, interaction: discord.Interaction) -> None:
+        if interaction.guild is None:
+            return
+        actions = await list_redeem_actions(self.bot.db, interaction.guild.id)
+        if not actions:
+            await interaction.response.send_message("no redeem actions configured", ephemeral=True)
+            return
+        lines = [f"- **{a['reward_title']}** → {a['action_type']} ({a['action_value']})" for a in actions]
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
 
 async def setup(bot: "Bot") -> None:

@@ -21,10 +21,14 @@ from src.cogs.twitchchat.db import (
     get_watchtime,
     list_commands,
     list_queue,
+    list_shoutout_overrides,
     queue_join,
     remove_command,
+    remove_shoutout_override,
     set_channel,
     set_enabled,
+    set_shoutout_override,
+    get_shoutout_override,
     upsert_settings,
 )
 from src.cogs.twitchchat.irc import TWITCH_BOT_USERNAME, ChatMessage, TwitchIRCClient
@@ -77,7 +81,7 @@ class TwitchChatCog(commands.Cog, name="twitchchat"):
         await self.irc.stop()
         await self.auth_server.stop()
 
-    
+    # ---- config commands ----
 
     group = discord.app_commands.Group(name="twitchchat", description="configure the twitch chat bot")
 
@@ -87,9 +91,7 @@ class TwitchChatCog(commands.Cog, name="twitchchat"):
         token = await get_valid_access_token(self.bot)
         if token is None:
             await interaction.response.send_message(
-                "the bot account hasn't been authenticated yet - visit"
-                " http://<your-host>:8083/auth/twitch, log in as the bot account,"
-                " then try this again.",
+                "authentication error.",
                 ephemeral=True,
             )
             return
@@ -130,6 +132,50 @@ class TwitchChatCog(commands.Cog, name="twitchchat"):
         assert interaction.guild is not None
         await upsert_settings(self.bot.db, interaction.guild.id, shoutout_channel_id=channel.id)
         await interaction.response.send_message(f"shoutouts will post to {channel.mention}", ephemeral=True)
+
+    @group.command(name="shoutoutmessage", description="default !so message. placeholders: {user} {game} {url}")
+    @discord.app_commands.checks.has_permissions(manage_guild=True)
+    async def shoutout_message_cmd(self, interaction: discord.Interaction, message: str) -> None:
+        assert interaction.guild is not None
+        await upsert_settings(self.bot.db, interaction.guild.id, shoutout_message=message)
+        await interaction.response.send_message(f"default shoutout message set to:\n{message}", ephemeral=True)
+
+    shoutout_group = discord.app_commands.Group(
+        name="shoutoutfor", description="per-streamer !so message overrides"
+    )
+
+    @shoutout_group.command(name="set", description="set a custom !so message for one twitch user")
+    @discord.app_commands.describe(
+        twitch_user="twitch username this override applies to",
+        message="placeholders: {user} {game} {url}",
+    )
+    @discord.app_commands.checks.has_permissions(manage_guild=True)
+    async def shoutout_for_set(
+        self, interaction: discord.Interaction, twitch_user: str, message: str
+    ) -> None:
+        assert interaction.guild is not None
+        await set_shoutout_override(self.bot.db, interaction.guild.id, twitch_user, message)
+        await interaction.response.send_message(
+            f"`!so {twitch_user}` will now say:\n{message}", ephemeral=True
+        )
+
+    @shoutout_group.command(name="remove", description="remove a per-streamer !so override")
+    @discord.app_commands.checks.has_permissions(manage_guild=True)
+    async def shoutout_for_remove(self, interaction: discord.Interaction, twitch_user: str) -> None:
+        assert interaction.guild is not None
+        await remove_shoutout_override(self.bot.db, interaction.guild.id, twitch_user)
+        await interaction.response.send_message(f"removed the override for {twitch_user}", ephemeral=True)
+
+    @shoutout_group.command(name="list", description="list all per-streamer !so overrides")
+    @discord.app_commands.checks.has_permissions(manage_guild=True)
+    async def shoutout_for_list(self, interaction: discord.Interaction) -> None:
+        assert interaction.guild is not None
+        overrides = await list_shoutout_overrides(self.bot.db, interaction.guild.id)
+        if not overrides:
+            await interaction.response.send_message("no per-streamer overrides set", ephemeral=True)
+            return
+        lines = [f"**{o['twitch_login']}**: {o['message']}" for o in overrides]
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     @group.command(name="clipchannel", description="discord channel for !clip posts")
     @discord.app_commands.checks.has_permissions(manage_guild=True)
@@ -196,7 +242,7 @@ class TwitchChatCog(commands.Cog, name="twitchchat"):
         lines = [f"`{c['trigger']}` → {c['template']}" for c in cmds]
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
-    
+    # ---- chat message handling ----
     async def _cmd_link(self, guild_id: int, msg: ChatMessage, arg: str) -> None:
         code = arg.strip().upper()
         pending = self._pending_links.get(code)
@@ -212,7 +258,7 @@ class TwitchChatCog(commands.Cog, name="twitchchat"):
         del self._pending_links[code]
         await economy_links.link_account(self.bot.db, guild_id, discord_user_id, msg.user_login, int(time.time()))
 
-        
+        # merge: fold any existing twitch-only balance into the discord balance
         twitch_bal = await economy_db.get_twitch_balance(self.bot.db, guild_id, msg.user_login)
         if twitch_bal:
             await economy_db.add_balance(self.bot.db, guild_id, discord_user_id, twitch_bal)
@@ -291,8 +337,8 @@ class TwitchChatCog(commands.Cog, name="twitchchat"):
             return
         guild_id, settings = found
         
-        
-        
+        # watchtime: credit elapsed time since this user's last message,
+        # capped so idling doesn't inflate it.
         key = (guild_id, msg.user_login)
         now = time.monotonic()
         last = self._last_seen.get(key)
@@ -349,7 +395,8 @@ class TwitchChatCog(commands.Cog, name="twitchchat"):
         info = await self.bot.twitch.get_channel_info(user_id)
         game = info["game_name"] if info and info.get("game_name") else "something"
         url = f"https://twitch.tv/{target.lower()}"
-        template = str(settings.get("shoutout_message") or "")
+        override = await get_shoutout_override(self.bot.db, guild_id, target)
+        template = override or str(settings.get("shoutout_message") or "")
         text = template.replace("{user}", display_name).replace("{game}", game).replace("{url}", url)
         await self._reply(msg.channel, text)
 

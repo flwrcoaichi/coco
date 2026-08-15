@@ -16,14 +16,15 @@ if TYPE_CHECKING:
 
 log = get_logger("twitch.webserver")
 
-NotifyCallback = Callable[[str], Awaitable[None]]
+# sub_type -> handler(event dict)
+EventCallback = Callable[[dict[str, object]], Awaitable[None]]
 
 WEBHOOK_PATH = "/webhook/twitch"
 
 
 def _verify_signature(headers: "web.RequestHeaders", body: bytes) -> bool:
     if not TWITCH_WEBHOOK_SECRET:
-        
+        # misconfiguration - refuse rather than silently accepting unsigned payloads
         return False
     msg_id = headers.get("Twitch-Eventsub-Message-Id", "")
     timestamp = headers.get("Twitch-Eventsub-Message-Timestamp", "")
@@ -36,11 +37,12 @@ def _verify_signature(headers: "web.RequestHeaders", body: bytes) -> bool:
     return hmac.compare_digest(expected, signature)
 
 
-def build_app(notify_callback: NotifyCallback) -> web.Application:
+def build_app(handlers: dict[str, EventCallback]) -> web.Application:
     """builds the tiny aiohttp app that receives twitch's EventSub webhook
     deliveries. this is intentionally minimal - just the one route - and
     runs on its own port, independent of the main dashboard
-    (src/web/server.py)."""
+    (src/web/server.py). `handlers` maps an eventsub subscription type
+    (e.g. "stream.online") to whatever should run when one comes in."""
     app = web.Application()
 
     async def webhook_handler(request: web.Request) -> web.Response:
@@ -59,13 +61,13 @@ def build_app(notify_callback: NotifyCallback) -> web.Application:
             return web.Response(status=200, text=data["challenge"])
 
         if msg_type == "notification":
-            sub_type = data.get("subscription", {}).get("type")
-            if sub_type == "stream.online":
-                broadcaster_id: str = data["event"]["broadcaster_user_id"]
+            sub_type = data.get("subscription", {}).get("type", "")
+            handler = handlers.get(sub_type)
+            if handler is not None:
                 try:
-                    await notify_callback(broadcaster_id)
+                    await handler(data.get("event", {}))
                 except Exception:
-                    log.exception("notify callback failed for %s", broadcaster_id)
+                    log.exception("eventsub handler failed for %s", sub_type)
 
         if msg_type == "revocation":
             log.warning("eventsub webhook subscription revoked: %s", data.get("subscription"))
@@ -83,11 +85,11 @@ class TwitchWebhookServer:
 
     def __init__(
         self,
-        notify_callback: NotifyCallback,
+        handlers: dict[str, EventCallback],
         host: str = "0.0.0.0",
         port: int = 8082,
     ) -> None:
-        self._app = build_app(notify_callback)
+        self._app = build_app(handlers)
         self._host = host
         self._port = port
         self._runner: web.AppRunner | None = None
@@ -102,3 +104,4 @@ class TwitchWebhookServer:
     async def stop(self) -> None:
         if self._runner is not None:
             await self._runner.cleanup()
+

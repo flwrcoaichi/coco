@@ -62,7 +62,7 @@ async def set_enabled(db: Database, guild_id: int, enabled: bool) -> None:
     await upsert_settings(db, guild_id, enabled=1 if enabled else 0)
 
 
-
+# ---- custom commands ----
 
 _CMD_COLUMNS = "guild_id, trigger, kind, template, min_roll, max_roll"
 _CMD_KEYS = ("guild_id", "trigger", "kind", "template", "min_roll", "max_roll")
@@ -119,7 +119,41 @@ async def list_commands(db: Database, guild_id: int) -> list[dict[str, object]]:
     return [_row_to_cmd(r) for r in rows]
 
 
+# ---- per-user shoutout overrides ----
 
+
+async def set_shoutout_override(db: Database, guild_id: int, twitch_login: str, message: str) -> None:
+    await db.execute(
+        "insert into twitch_shoutout_overrides (guild_id, twitch_login, message) values (?, ?, ?)"
+        " on conflict(guild_id, twitch_login) do update set message = excluded.message",
+        (guild_id, twitch_login.lower(), message),
+    )
+
+
+async def remove_shoutout_override(db: Database, guild_id: int, twitch_login: str) -> None:
+    await db.execute(
+        "delete from twitch_shoutout_overrides where guild_id = ? and twitch_login = ?",
+        (guild_id, twitch_login.lower()),
+    )
+
+
+async def get_shoutout_override(db: Database, guild_id: int, twitch_login: str) -> str | None:
+    row = await db.fetchone(
+        "select message from twitch_shoutout_overrides where guild_id = ? and twitch_login = ?",
+        (guild_id, twitch_login.lower()),
+    )
+    return str(row[0]) if row else None
+
+
+async def list_shoutout_overrides(db: Database, guild_id: int) -> list[dict[str, object]]:
+    rows = await db.fetchall(
+        "select twitch_login, message from twitch_shoutout_overrides where guild_id = ? order by twitch_login",
+        (guild_id,),
+    )
+    return [{"twitch_login": r[0], "message": r[1]} for r in rows]
+
+
+# ---- watchtime ----
 
 async def add_watchtime(db: Database, guild_id: int, twitch_login: str, seconds: int) -> None:
     if seconds <= 0:
@@ -139,7 +173,7 @@ async def get_watchtime(db: Database, guild_id: int, twitch_login: str) -> int:
     return int(row[0]) if row else 0
 
 
-
+# ---- join queue ----
 
 async def queue_join(db: Database, guild_id: int, twitch_login: str) -> bool:
     """returns False if the user was already queued."""

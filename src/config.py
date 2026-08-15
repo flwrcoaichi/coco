@@ -16,7 +16,6 @@ class BotConfig:
     token: str = os.getenv("DISCORD_TOKEN", "")
     command_prefix: str = os.getenv("COMMAND_PREFIX", ">>")
     db_path: str = os.getenv("DB_PATH", "data/bot.db")
-
     dashboard_enabled: bool = _bool("DASHBOARD_ENABLED", True)
     dashboard_host: str = os.getenv("DASHBOARD_HOST", "0.0.0.0")
     dashboard_port: int = int(os.getenv("DASHBOARD_PORT", "8081"))
@@ -25,7 +24,15 @@ class BotConfig:
     twitch_webhook_enabled: bool = _bool("TWITCH_WEBHOOK_ENABLED", True)
     twitch_webhook_host: str = os.getenv("TWITCH_WEBHOOK_HOST", "0.0.0.0")
     twitch_webhook_port: int = int(os.getenv("TWITCH_WEBHOOK_PORT", "8082"))
-
     twitch_webhook_callback_url: str = os.getenv("TWITCH_WEBHOOK_CALLBACK_URL", "")
 
+    twitch_redeem_auth_enabled: bool = _bool("TWITCH_REDEEM_AUTH_ENABLED", True)
+    twitch_redeem_auth_host: str = os.getenv("TWITCH_REDEEM_AUTH_HOST", "0.0.0.0")
+    twitch_redeem_auth_port: int = int(os.getenv("TWITCH_REDEEM_AUTH_PORT", "8084"))
+    twitch_redeem_auth_public_url: str = os.getenv("TWITCH_REDEEM_AUTH_PUBLIC_URL", "")
+
     discord_client_id: str = os.getenv("DISCORD_CLIENT_ID", "")
+
+    owner_ids: frozenset[int] = frozenset(
+        int(x) for x in os.getenv("BOT_OWNER_IDS", "").replace(" ", "").split(",") if x
+    )

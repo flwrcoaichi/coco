@@ -22,6 +22,17 @@ create table if not exists twitch_chat_settings (
     clip_channel_id integer not null default 0,
     owner_discord_id integer not null default 0
 );
+
+create table if not exists twitch_redeem_auth (
+            guild_id INTEGER PRIMARY KEY,
+            broadcaster_id TEXT NOT NULL,
+            broadcaster_login TEXT NOT NULL,
+            access_token TEXT NOT NULL,
+            refresh_token TEXT NOT NULL,
+            expires_at INTEGER NOT NULL,
+            subscription_id TEXT
+);
+
 create table if not exists twitch_auth (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     access_token TEXT NOT NULL,
@@ -36,6 +47,13 @@ create table if not exists twitch_chat_commands (
     min_roll integer not null default 0,
     max_roll integer not null default 100,
     primary key (guild_id, trigger)
+);
+
+create table if not exists twitch_shoutout_overrides (
+    guild_id integer not null,
+    twitch_login text not null,
+    message text not null,
+    primary key (guild_id, twitch_login)
 );
 
 create table if not exists twitch_watchtime (

@@ -155,7 +155,15 @@ class TwitchClient:
         return int(data.get("total", 0))
 
     async def subscribe_to_stream_online_ws(self, broadcaster_user_id: str, session_id: str) -> str | None:
+        """subscribe using websocket transport - the subscription is delivered to
+        the eventsub websocket connection identified by `session_id`, no public
+        callback url involved.
 
+        note: with an app access token, websocket transport only delivers
+        events for broadcasters who have authorized this app (e.g. via a user
+        OAuth flow). in practice that limits this to your own channel unless
+        every tracked streamer separately authorizes the app. use
+        subscribe_to_stream_online_webhook for tracking arbitrary streamers."""
         resp = await self._request(
             "POST",
             "https://api.twitch.tv/helix/eventsub/subscriptions",
@@ -175,7 +183,10 @@ class TwitchClient:
     async def subscribe_to_stream_online_webhook(
         self, broadcaster_user_id: str, callback_url: str, secret: str
     ) -> str | None:
-
+        """subscribe using webhook transport - twitch POSTs events to
+        `callback_url` (must be a public https url), signed with `secret`.
+        works for any broadcaster, no per-user OAuth needed, since this uses
+        an app access token."""
         resp = await self._request(
             "POST",
             "https://api.twitch.tv/helix/eventsub/subscriptions",
@@ -200,3 +211,41 @@ class TwitchClient:
             "https://api.twitch.tv/helix/eventsub/subscriptions",
             params={"id": subscription_id},
         )
+
+    async def list_custom_rewards(self, broadcaster_id: str, user_token: str) -> list[dict[str, str]] | None:
+        """channel point rewards for a broadcaster - has to be their own user
+        token with channel:read:redemptions, an app token can't read another
+        channel's rewards."""
+        assert self._session is not None
+        resp = await self._session.get(
+            "https://api.twitch.tv/helix/channel_points/custom_rewards",
+            headers={"Client-Id": TWITCH_CLIENT_ID, "Authorization": f"Bearer {user_token}"},
+            params={"broadcaster_id": broadcaster_id},
+        )
+        if resp.status != 200:
+            log.error("list custom rewards failed: %s %s", resp.status, await resp.text())
+            return None
+        data = await resp.json()
+        return [{"id": r["id"], "title": r["title"]} for r in data.get("data", [])]
+
+    async def subscribe_to_redemption_webhook(
+        self, broadcaster_user_id: str, callback_url: str, secret: str
+    ) -> str | None:
+        """webhook transport, app access token - works once the broadcaster has
+        granted channel:read:redemptions at least once via user oauth (see
+        redeem_auth.py), same requirement twitch has for reading rewards."""
+        resp = await self._request(
+            "POST",
+            "https://api.twitch.tv/helix/eventsub/subscriptions",
+            json={
+                "type": "channel.channel_points_custom_reward_redemption.add",
+                "version": "1",
+                "condition": {"broadcaster_user_id": broadcaster_user_id},
+                "transport": {"method": "webhook", "callback": callback_url, "secret": secret},
+            },
+        )
+        if resp.status != 202:
+            log.error("redemption eventsub subscribe failed: %s %s", resp.status, await resp.text())
+            return None
+        data = await resp.json()
+        return data["data"][0]["id"]

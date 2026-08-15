@@ -45,6 +45,12 @@ function authHeaders() {
 
 async function api(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers: { ...authHeaders(), ...(options.headers || {}) } });
+  if (res.status === 401) {
+    localStorage.removeItem("coco_token");
+    localStorage.removeItem("coco_token_expires");
+    window.location.href = "/";
+    return {};
+  }
   return res.json();
 }
 
@@ -54,11 +60,12 @@ function fieldEl(root, key) {
 
 function fillSelect(select, items, selected) {
   select.innerHTML = "<option value=''>none</option>";
+  const selectedStr = selected === null || selected === undefined ? "" : String(selected);
   items.forEach((item) => {
     const option = document.createElement("option");
     option.value = item.id;
     option.textContent = item.name;
-    if (item.id === selected) option.selected = true;
+    if (String(item.id) === selectedStr) option.selected = true;
     select.appendChild(option);
   });
 }
@@ -145,11 +152,9 @@ async function loadConfigPanel() {
     api(`/api/guild/${guildId}/config`),
   ]);
   const textChannels = channels.filter((c) => c.type === "text");
-  const categories = channels.filter((c) => c.type === "category");
   const root = document.getElementById("config-fields");
   loadFields(root, CONFIG_FIELDS, config, roles, textChannels);
   fillSelect(document.getElementById("ticket-panel-channel"), textChannels, "");
-  fillSelect(document.getElementById("ticket-panel-category"), categories, "");
   fillSelect(document.getElementById("ticket-panel-staff-role"), roles, "");
   renderWidgetPreview(guildId, Boolean(config.widget_enabled));
 }
@@ -215,7 +220,6 @@ async function loadTicketPanels() {
 async function createTicketPanel() {
   const payload = {
     channel_id: document.getElementById("ticket-panel-channel").value || null,
-    category_id: document.getElementById("ticket-panel-category").value || null,
     staff_role_id: document.getElementById("ticket-panel-staff-role").value || null,
     title: document.getElementById("ticket-panel-title").value || "support",
     description: document.getElementById("ticket-panel-description").value || "click below to open a ticket",
@@ -275,6 +279,8 @@ async function executeAction(action) {
 }
 
 function signOut() {
+  localStorage.removeItem("coco_token");
+  localStorage.removeItem("coco_token_expires");
   window.location.href = "/";
 }
 
@@ -294,11 +300,27 @@ function tokenFromHash() {
   const params = new URLSearchParams(window.location.hash.substring(1));
   if (!params.has("access_token")) return null;
   history.replaceState({}, document.title, window.location.pathname);
-  return params.get("access_token");
+  const token = params.get("access_token");
+  const expiresIn = Number(params.get("expires_in") || 0);
+  const expiresAt = Date.now() + expiresIn * 1000;
+  localStorage.setItem("coco_token", token);
+  localStorage.setItem("coco_token_expires", String(expiresAt));
+  return token;
+}
+
+function storedToken() {
+  const token = localStorage.getItem("coco_token");
+  const expiresAt = Number(localStorage.getItem("coco_token_expires") || 0);
+  if (!token || Date.now() > expiresAt) {
+    localStorage.removeItem("coco_token");
+    localStorage.removeItem("coco_token_expires");
+    return null;
+  }
+  return token;
 }
 
 async function init() {
-  state.token = tokenFromHash();
+  state.token = tokenFromHash() || storedToken();
   if (!state.token) {
     signedOutPanel.hidden = false;
     return;
