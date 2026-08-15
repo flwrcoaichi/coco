@@ -595,21 +595,31 @@ async function builderSubmit(doPost) {
   if (doPost && !channelId) { toast("pick a channel to post to", "err"); return; }
 
   
+  
+  const validButtons = builderButtons.filter(btn => btn.label.trim() && btn.roleId);
   let containerName = null;
-  if (builderButtons.length) {
+  if (validButtons.length) {
     containerName = `__builder_${name}`;
-    const items = builderButtons.map(btn => ({
-      label:  btn.label || "button",
+    const items = validButtons.map(btn => ({
+      label:  btn.label.trim(),
       style:  btn.style,
       action: btn.action,
-      data:   btn.roleId ? { role_id: parseInt(btn.roleId) } : {},
+      data:   { role_id: parseInt(btn.roleId) },
     }));
     const accentInt = /^#?[0-9a-fA-F]{6}$/.test(accent)
       ? parseInt(accent.replace("#",""), 16) : 0x5865F2;
-    await api(`/api/guild/${state.guild.id}/containers`, {
+    const containerResult = await api(`/api/guild/${state.guild.id}/containers`, {
       method: "POST",
       body: JSON.stringify({ name: containerName, items, accent_color: accentInt }),
     });
+    if (!containerResult?.ok) {
+      toast(containerResult?.error || "failed to save buttons", "err");
+      return;
+    }
+  } else if (builderButtons.length) {
+    
+    toast("each button needs a label and a role before posting", "err");
+    return;
   }
 
   

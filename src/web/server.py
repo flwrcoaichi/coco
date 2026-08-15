@@ -522,16 +522,16 @@ class DashboardServer:
         with open(path, "r", encoding="utf-8") as file:
             return web.Response(text=file.read(), content_type=content_type)
 
-        async def _handle_get_twitch_chat(self, request: web.Request) -> web.Response:
-            auth = await self._authenticated_user(request)
-            if isinstance(auth, web.Response): return auth
-            token, user_id = auth
-            guild_id_str = request.match_info["guild_id"]
-            denied = await self._check_guild_access(token, user_id, guild_id_str)
-            if denied: return denied
-            from src.cogs.twitchchat.db import get_settings
-            settings = await get_settings(self.bot.db, int(guild_id_str))
-            return web.json_response(settings or {})
+    async def _handle_get_twitch_chat(self, request: web.Request) -> web.Response:
+        auth = await self._authenticated_user(request)
+        if isinstance(auth, web.Response): return auth
+        token, user_id = auth
+        guild_id_str = request.match_info["guild_id"]
+        denied = await self._check_guild_access(token, user_id, guild_id_str)
+        if denied: return denied
+        from src.cogs.twitchchat.db import get_settings
+        settings = await get_settings(self.bot.db, int(guild_id_str))
+        return web.json_response(settings or {})
  
     async def _handle_set_twitch_chat(self, request: web.Request) -> web.Response:
         auth = await self._authenticated_user(request)
@@ -682,15 +682,26 @@ class DashboardServer:
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, discord.TextChannel):
             return web.json_response({"error": "channel not found or not a text channel"}, status=404)
-        layout = BaseLayout()
-        layout.add_container(discord.ui.TextDisplay(msg["content"]), accent_color=0x5865F2)
+        accent_color = 0x5865F2
+        action_row = None
         if msg.get("container_name"):
             container = await get_container(self.bot.db, guild_id, msg["container_name"])
-            if container and container["items"]:
-                layout.add_item(build_container_view(guild_id, container))
+            if container:
+                if container.get("accent_color"):
+                    accent_color = int(container["accent_color"])
+                # only build the row if there are valid items (have an "id" key)
+                valid_items = [i for i in container.get("items", []) if isinstance(i, dict) and i.get("id")]
+                if valid_items:
+                    action_row = build_container_view(guild_id, container)
+        layout = BaseLayout()
+        layout.add_container(discord.ui.TextDisplay(msg["content"]), accent_color=accent_color)
+        if action_row is not None:
+            layout.add_item(action_row)
         try:
             posted = await channel.send(view=layout)
         except discord.HTTPException as exc:
             return web.json_response({"error": str(exc)}, status=500)
         await set_posted(self.bot.db, guild_id, name, channel_id, posted.id)
         return web.json_response({"ok": True, "message_id": posted.id})
+ 
+
