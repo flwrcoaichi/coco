@@ -102,38 +102,45 @@ body {
 .brand-mark {
   width: 44px;
   height: 44px;
-  background: var(--brown-dark);
   position: relative;
   flex-shrink: 0;
+  background-color: var(--brown-dark);
   border-radius: 6px;
   
-  display: grid;
-  grid-template-columns: 14px 14px;
-  grid-template-rows: 14px 14px;
-  gap: 4px;
-  padding: 6px;
-  box-sizing: border-box;
+  /* Render the bottom row directly using linear-gradients and mask cutouts */
+  background-image: 
+    /* Bottom-Left Triangle */
+    linear-gradient(to top right, var(--cream) 50%, transparent 50.5%),
+    /* Bottom-Right L-shape (Base block + left step) */
+    linear-gradient(var(--cream), var(--cream)),
+    linear-gradient(var(--cream), var(--cream));
+  
+  background-size: 14px 14px, 14px 7px, 7px 14px;
+  background-position: 6px 24px, 24px 31px, 24px 24px;
+  background-repeat: no-repeat;
 }
 
+/* Top-Left: Hollow Square */
 .brand-mark::before {
   content: "";
-  box-sizing: border-box;
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 14px;
+  height: 14px;
   border: 2.5px solid var(--cream);
-  background: transparent;
+  box-sizing: border-box;
 }
+
+/* Top-Right: Filled Square */
 .brand-mark::after {
   content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 14px;
+  height: 14px;
   background: var(--cream);
-}
-
-.brand-mark-shape-bl {
-  background: var(--cream);
-  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-}
-
-.brand-mark-shape-br {
-  background: var(--cream);
-  clip-path: polygon(0 0, 50% 0, 50% 50%, 100% 50%, 100% 100%, 0 100%);
 }
 .brand-name {
   font-family: var(--font-display);
