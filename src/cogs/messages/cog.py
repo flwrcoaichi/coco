@@ -61,6 +61,11 @@ def build_container_view(guild_id: int, container: dict) -> ui.ActionRow:
                 style=style,
             )
         )
+
+    if len(row.children) == 0:
+        log.warning(f"container {container['name']} has no valid buttons")
+        return None
+    
     return row
 
 

@@ -10,8 +10,6 @@ VALID_STYLES = ("primary", "secondary", "success", "danger")
 
 
 def new_item_id() -> str:
-    """short id used in a button's custom_id to identify which item within a
-    container was clicked. must be url/custom_id-safe and stable once saved."""
     return secrets.token_hex(4)
 
 

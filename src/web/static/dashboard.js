@@ -601,6 +601,9 @@ async function builderSubmit(doPost) {
   if (validButtons.length) {
     containerName = `__builder_${name}`;
     const items = validButtons.map(btn => ({
+      id:     Array.from(crypto.getRandomValues(new Uint8Array(4)))
+             .map(b => b.toString(16).padStart(2, '0'))
+             .join(''),
       label:  btn.label.trim(),
       style:  btn.style,
       action: btn.action,
