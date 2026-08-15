@@ -105,13 +105,10 @@ body {
   position: relative;
   flex-shrink: 0;
   background-color: var(--brown-dark);
-  border-radius: 6px;
+  border-radius: 0px;
   
-  /* Render the bottom row directly using linear-gradients and mask cutouts */
   background-image: 
-    /* Bottom-Left Triangle */
     linear-gradient(to top right, var(--cream) 50%, transparent 50.5%),
-    /* Bottom-Right L-shape (Base block + left step) */
     linear-gradient(var(--cream), var(--cream)),
     linear-gradient(var(--cream), var(--cream));
   
