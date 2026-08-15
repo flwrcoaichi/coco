@@ -105,20 +105,36 @@ body {
   background: var(--brown-dark);
   position: relative;
   flex-shrink: 0;
+  border-radius: 6px;
+  
+  display: grid;
+  grid-template-columns: 14px 14px;
+  grid-template-rows: 14px 14px;
+  gap: 4px;
+  padding: 6px;
+  box-sizing: border-box;
 }
 
-.brand-mark::before,
+.brand-mark::before {
+  content: "";
+  box-sizing: border-box;
+  border: 2.5px solid var(--cream);
+  background: transparent;
+}
 .brand-mark::after {
   content: "";
-  position: absolute;
-  width: 14px;
-  height: 14px;
   background: var(--cream);
 }
 
-.brand-mark::before { top: 6px; left: 6px; }
-.brand-mark::after { top: 6px; right: 6px; }
+.brand-mark-shape-bl {
+  background: var(--cream);
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+}
 
+.brand-mark-shape-br {
+  background: var(--cream);
+  clip-path: polygon(0 0, 50% 0, 50% 50%, 100% 50%, 100% 100%, 0 100%);
+}
 .brand-name {
   font-family: var(--font-display);
   font-size: 15px;
