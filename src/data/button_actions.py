@@ -34,7 +34,8 @@ async def _grant_role(interaction: discord.Interaction, data: dict[str, Any]) ->
     if interaction.guild is None or not isinstance(interaction.user, discord.Member):
         await interaction.response.send_message("this only works in a server", ephemeral=True)
         return
-    role_id = data.get("role_id")
+    role_data = data.get("role_id")
+    role_id = int(role_data) if role_data is not None else None
     if not isinstance(role_id, int):
         await interaction.response.send_message("this button is misconfigured (no role set)", ephemeral=True)
         return
@@ -62,7 +63,8 @@ async def _give_role(interaction: discord.Interaction, data: dict[str, Any]) -> 
     if interaction.guild is None or not isinstance(interaction.user, discord.Member):
         await interaction.response.send_message("this only works in a server", ephemeral=True)
         return
-    role_id = data.get("role_id")
+    role_data = data.get("role_id")
+    role_id = int(role_data) if role_data is not None else None
     if not isinstance(role_id, int):
         await interaction.response.send_message("this button is misconfigured (no role set)", ephemeral=True)
         return
