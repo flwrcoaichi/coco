@@ -22,7 +22,7 @@ function storedToken() {
 async function checkExistingSession() {
   const token = storedToken();
   if (!token) return false;
-  // quick validate
+  
   const res = await fetch("https://discord.com/api/v10/users/@me", {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -57,13 +57,13 @@ async function init() {
 
   const loginBtn = document.getElementById("login-button");
 
-  // check for an existing valid session
+  
   const user = await checkExistingSession();
   if (user) {
-    // already logged in — swap button to dashboard link
+    
     loginBtn.textContent = `dashboard (${user.username})`;
     loginBtn.addEventListener("click", () => window.location.href = "/dashboard");
-    // optionally show avatar
+    
     if (user.avatar) {
       const img = document.createElement("img");
       img.src = `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=32`;

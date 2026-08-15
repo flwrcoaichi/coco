@@ -1,14 +1,20 @@
 
 
+
+
+
+
 const API_BASE = window.COCO_API_BASE || "";
+
 
 const state = {
   token: null,
-  user: null,       // { id, username, avatar }
+  user: null,       
   guild: null,
   roles: [],
   textChannels: [],
 };
+
 
 let _toastTimer = null;
 function toast(msg, kind = "ok") {
@@ -18,6 +24,7 @@ function toast(msg, kind = "ok") {
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => el.classList.remove("show"), 3000);
 }
+
 
 function saveToken(token, expiresIn = 604800) {
   localStorage.setItem("coco_token", token);
@@ -34,6 +41,17 @@ function clearToken() {
   localStorage.removeItem("coco_token_exp");
 }
 
+
+
+
+
+
+function safeParseJson(text) {
+  
+  const safe = text.replace(/:\s*(\d{16,})/g, (_, n) => `: "${n}"`);
+  return JSON.parse(safe);
+}
+
 async function api(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -48,8 +66,10 @@ async function api(path, options = {}) {
     showSignedOut();
     return null;
   }
-  return res.json();
+  const text = await res.text();
+  try { return safeParseJson(text); } catch { return null; }
 }
+
 
 const CONFIG_FIELDS = [
   { key: "moderator_role",      input: "select", source: "roles" },
@@ -82,6 +102,7 @@ const MODERATION_FIELDS = [
 function fillSelect(select, items, selected) {
   if (!select) return;
   select.innerHTML = "<option value=''>— none —</option>";
+  
   const sel = selected !== null && selected !== undefined ? String(selected) : "";
   items.forEach(item => {
     const opt = document.createElement("option");
@@ -131,6 +152,7 @@ function saveFields(root, fields) {
   return payload;
 }
 
+
 function showPanel(name) {
   document.querySelectorAll("[data-panel-id]").forEach(el => {
     el.classList.toggle("active", el.dataset.panelId === name);
@@ -143,6 +165,7 @@ function showPanel(name) {
   if (name === "twitch")   loadTwitchSettings();
   if (name === "builder")  loadSavedMessages();
 }
+
 
 function parseOauthHash() {
   if (!window.location.hash) return null;
@@ -195,6 +218,7 @@ function signOut() {
   showSignedOut();
 }
 
+
 async function loadGuilds() {
   const guilds = await api("/api/guilds");
   if (!guilds) return;
@@ -218,6 +242,7 @@ async function selectGuild(guild) {
   state.guild = guild;
   document.getElementById("guild-name").textContent = guild.name;
 
+  
   const [rolesData, channelsData] = await Promise.all([
     api(`/api/guild/${guild.id}/roles`),
     api(`/api/guild/${guild.id}/channels`),
@@ -235,8 +260,10 @@ async function loadConfigPanel() {
   const root = document.getElementById("config-fields");
   loadFields(root, CONFIG_FIELDS, config);
 
+  
   fillSelect(document.getElementById("ticket-panel-channel"), state.textChannels, "");
   fillSelect(document.getElementById("ticket-panel-staff-role"), state.roles, "");
+  
   fillSelect(document.getElementById("builder-channel"), state.textChannels, "");
 
   renderWidgetPreview(state.guild.id, Boolean(config.widget_enabled));
@@ -254,6 +281,7 @@ function renderWidgetPreview(guildId, enabled) {
   el.appendChild(iframe);
 }
 
+
 async function saveConfig() {
   const payload = saveFields(document.getElementById("config-fields"), CONFIG_FIELDS);
   const result = await api(`/api/guild/${state.guild.id}/config`, {
@@ -267,6 +295,7 @@ async function saveConfig() {
     toast(result?.error || "failed to save", "err");
   }
 }
+
 
 async function loadModeration() {
   if (!state.guild) return;
@@ -283,6 +312,8 @@ async function saveModeration() {
   });
   result?.ok ? toast("moderation settings saved") : toast(result?.error || "failed", "err");
 }
+
+
 async function loadTicketPanels() {
   if (!state.guild) return;
   const panels = await api(`/api/guild/${state.guild.id}/ticket_panels`);
@@ -315,8 +346,18 @@ async function createTicketPanel() {
   else toast(result?.error || "failed", "err");
 }
 
+
+
+
+
 async function loadTwitchSettings() {
   if (!state.guild) return;
+  
+  
+  
+  
+  
+  
   const [settings, overrides, cmds] = await Promise.all([
     api(`/api/guild/${state.guild.id}/twitch_chat`),
     api(`/api/guild/${state.guild.id}/twitch_chat/shoutout_overrides`),
@@ -422,6 +463,8 @@ async function removeCmd(trigger) {
   result?.ok ? (toast(`removed ${trigger}`), loadTwitchSettings()) : toast("failed", "err");
 }
 
+
+
 let builderButtons = [];
 
 function renderBuilderPreview() {
@@ -487,6 +530,7 @@ function renderBtnList() {
       <button class="button remove-btn" data-remove="${i}">✕</button>
     `;
 
+    
     const roleRow = document.createElement("div");
     roleRow.style.cssText = "grid-column:1/-1;display:grid;grid-template-columns:1fr;gap:6px;margin-top:-6px";
     const roleGroup = document.createElement("div");
@@ -550,6 +594,7 @@ async function builderSubmit(doPost) {
   if (!content) { toast("message can't be empty", "err"); return; }
   if (doPost && !channelId) { toast("pick a channel to post to", "err"); return; }
 
+  
   let containerName = null;
   if (builderButtons.length) {
     containerName = `__builder_${name}`;
@@ -567,6 +612,7 @@ async function builderSubmit(doPost) {
     });
   }
 
+  
   const action = "none";
   const saveResult = await api(`/api/guild/${state.guild.id}/messages`, {
     method: "POST",
@@ -574,6 +620,7 @@ async function builderSubmit(doPost) {
   });
   if (!saveResult?.ok) { toast(saveResult?.error || "failed to save message", "err"); return; }
 
+  
   if (doPost) {
     const postResult = await api(`/api/guild/${state.guild.id}/messages/${encodeURIComponent(name)}/send`, {
       method: "POST",
@@ -590,6 +637,7 @@ async function builderSubmit(doPost) {
   loadSavedMessages();
 }
 
+
 async function executeAction(action) {
   if (!state.guild) { toast("select a server first", "err"); return; }
   const body = {};
@@ -604,22 +652,27 @@ async function executeAction(action) {
   result?.ok ? toast(result.message || "done") : toast(result?.error || "action failed", "err");
 }
 
+
 function escHtml(s) {
   if (!s) return "";
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 function escAttr(s) { return escHtml(s); }
 
+
 async function init() {
+  
   const hashToken = parseOauthHash();
   if (hashToken) state.token = hashToken;
 
+  
   if (!state.token) state.token = loadToken();
 
   if (state.token) {
+    
     const user = await fetchCurrentUser();
     if (!user) {
-      // token invalid
+      
       clearToken();
       state.token = null;
       showSignedOut();
@@ -632,6 +685,7 @@ async function init() {
     showSignedOut();
   }
 
+  
   document.getElementById("logout-button").addEventListener("click", signOut);
   document.querySelectorAll(".dash-tab").forEach(tab => {
     tab.addEventListener("click", () => {
@@ -652,10 +706,12 @@ async function init() {
   document.getElementById("builder-post")      ?.addEventListener("click", builderPost);
   document.getElementById("builder-save")      ?.addEventListener("click", builderSave);
 
+  
   ["builder-content", "builder-accent"].forEach(id => {
     document.getElementById(id)?.addEventListener("input", renderBuilderPreview);
   });
 
+  
   document.querySelectorAll(".tile-action").forEach(btn => {
     btn.addEventListener("click", () => executeAction(btn.dataset.action));
   });

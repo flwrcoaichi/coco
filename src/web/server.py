@@ -523,15 +523,15 @@ class DashboardServer:
             return web.Response(text=file.read(), content_type=content_type)
 
         async def _handle_get_twitch_chat(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
-        if isinstance(auth, web.Response): return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied: return denied
-        from src.cogs.twitchchat.db import get_settings
-        settings = await get_settings(self.bot.db, int(guild_id_str))
-        return web.json_response(settings or {})
+            auth = await self._authenticated_user(request)
+            if isinstance(auth, web.Response): return auth
+            token, user_id = auth
+            guild_id_str = request.match_info["guild_id"]
+            denied = await self._check_guild_access(token, user_id, guild_id_str)
+            if denied: return denied
+            from src.cogs.twitchchat.db import get_settings
+            settings = await get_settings(self.bot.db, int(guild_id_str))
+            return web.json_response(settings or {})
  
     async def _handle_set_twitch_chat(self, request: web.Request) -> web.Response:
         auth = await self._authenticated_user(request)
