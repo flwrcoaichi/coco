@@ -4,7 +4,7 @@ let clientId = null;
 
 async function loadClientId() {
   try {
-    const res = await fetch(`${API_BASE}/api/config`);
+    const res = await fetch(`${API_BASE}/lite/api/config`);
     const data = await res.json();
     clientId = data.discord_client_id || null;
   } catch (e) {
