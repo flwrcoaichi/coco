@@ -2,18 +2,13 @@ name: Deploy Static Site to Pages
 
 on:
   push:
-    branches: ["main"] 
-
-  
+    branches: ["main", "lite"]
   workflow_dispatch:
-
 
 permissions:
   contents: read
   pages: write
   id-token: write
-
-
 
 concurrency:
   group: "pages"
@@ -26,8 +21,26 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout Main Branch
         uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main_site
+
+      - name: Checkout Lite Branch
+        uses: actions/checkout@v4
+        with:
+          ref: lite
+          path: lite_site
+
+      - name: Assemble Site Structure
+        run: |
+          mkdir build_dir
+          # Copy main site assets to the root of the deployment
+          cp -r main_site/src/web/static/* build_dir/
+          # Copy lite site assets to the /lite subdirectory
+          mkdir build_dir/lite
+          cp -r lite_site/src/web/static/* build_dir/lite/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -35,8 +48,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          
-          path: './src/web/static'
+          path: './build_dir'
 
       - name: Deploy to GitHub Pages
         id: deployment
