@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 log = get_logger("web.server")
 
-_DISCORD_API = "https://discord.com/lite/api/v10"
+_DISCORD_API = "https://discord.com/api/v10"
 _ADMIN_BIT = 0x8
 
 
@@ -87,11 +87,21 @@ class DashboardServer:
             response: web.StreamResponse = web.Response(status=204)
         else:
             response = await handler(request)
+    
+        req_origin = request.headers.get("Origin", self.origin)
+        
+        if "://" in req_origin:
+            scheme_host = req_origin.split("://", 1)
+            clean_origin = f"{scheme_host[0]}://{scheme_host[1].split('/')[0]}"
+        else:
+            clean_origin = req_origin
+    
         response.headers.update(
             {
-                "Access-Control-Allow-Origin": self.origin,
+                "Access-Control-Allow-Origin": clean_origin,
                 "Access-Control-Allow-Headers": "Authorization, Content-Type",
                 "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Credentials": "true",
             }
         )
         return response
@@ -104,26 +114,26 @@ class DashboardServer:
         self.app.router.add_get(f"{prefix}/docs", self._serve_docs)
         self.app.router.add_get(f"{prefix}/static/{{filename}}", self._serve_static)
         routes = (
-            ("GET", "/lite/api/guilds", self._handle_guilds),
-            ("GET", "/lite/api/guild/{guild_id}/config", self._handle_get_config),
-            ("POST", "/lite/api/guild/{guild_id}/config", self._handle_set_config),
-            ("GET", "/lite/api/guild/{guild_id}/moderation", self._handle_get_moderation),
-            ("POST", "/lite/api/guild/{guild_id}/moderation", self._handle_set_moderation),
-            ("GET", "/lite/api/guild/{guild_id}/channels", self._handle_get_channels),
-            ("GET", "/lite/api/guild/{guild_id}/roles", self._handle_get_roles),
-            ("GET", "/lite/api/guild/{guild_id}/ticket_panels", self._handle_get_ticket_panels),
-            ("POST", "/lite/api/guild/{guild_id}/ticket_panels", self._handle_create_ticket_panel),
-            ("GET", "/lite/api/guild/{guild_id}/containers", self._handle_get_containers),
-            ("POST", "/lite/api/guild/{guild_id}/containers", self._handle_save_container),
-            ("DELETE", "/lite/api/guild/{guild_id}/containers/{name}", self._handle_delete_container),
-            ("GET", "/lite/api/guild/{guild_id}/state", self._handle_get_state),
-            ("POST", "/lite/api/guild/{guild_id}/actions/{action}", self._handle_action),
-            ("GET", "/lite/api/config", self._handle_public_config),
-            ("GET", "/lite/api/guild/{guild_id}/messages", self._handle_list_messages),
-            ("POST", "/lite/api/guild/{guild_id}/messages", self._handle_save_message),
-            ("POST", "/lite/api/guild/{guild_id}/messages/{name}/send", self._handle_send_message),
-            ("PUT", "/lite/api/guild/{guild_id}/messages/{name}", self._handle_update_message),
-            ("DELETE", "/lite/api/guild/{guild_id}/messages/{name}", self._handle_delete_message),
+            ("GET", "/api/guilds", self._handle_guilds),
+            ("GET", "/api/guild/{guild_id}/config", self._handle_get_config),
+            ("POST", "/api/guild/{guild_id}/config", self._handle_set_config),
+            ("GET", "/api/guild/{guild_id}/moderation", self._handle_get_moderation),
+            ("POST", "/api/guild/{guild_id}/moderation", self._handle_set_moderation),
+            ("GET", "/api/guild/{guild_id}/channels", self._handle_get_channels),
+            ("GET", "/api/guild/{guild_id}/roles", self._handle_get_roles),
+            ("GET", "/api/guild/{guild_id}/ticket_panels", self._handle_get_ticket_panels),
+            ("POST", "/api/guild/{guild_id}/ticket_panels", self._handle_create_ticket_panel),
+            ("GET", "/api/guild/{guild_id}/containers", self._handle_get_containers),
+            ("POST", "/api/guild/{guild_id}/containers", self._handle_save_container),
+            ("DELETE", "/api/guild/{guild_id}/containers/{name}", self._handle_delete_container),
+            ("GET", "/api/guild/{guild_id}/state", self._handle_get_state),
+            ("POST", "/api/guild/{guild_id}/actions/{action}", self._handle_action),
+            ("GET", "/api/config", self._handle_public_config),
+            ("GET", "/api/guild/{guild_id}/messages", self._handle_list_messages),
+            ("POST", "/api/guild/{guild_id}/messages", self._handle_save_message),
+            ("POST", "/api/guild/{guild_id}/messages/{name}/send", self._handle_send_message),
+            ("PUT", "/api/guild/{guild_id}/messages/{name}", self._handle_update_message),
+            ("DELETE", "/api/guild/{guild_id}/messages/{name}", self._handle_delete_message),
         )
         for method, path, handler in routes:
             self.app.router.add_route(method, f"{prefix}{path}", handler)
