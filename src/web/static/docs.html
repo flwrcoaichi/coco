@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+    <head>
+  <meta charset="utf-8" />
+  <title>coco - docs</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://coco.aichi.me/" />
+  <meta property="og:title" content="coco" />
+  <meta property="og:description" content="moderation, music, tickets, and community tools for discord." />
+  <meta property="og:image" content="https://coco.aichi.me/og-image.png" />
+  
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://coco.aichi.me/" />
+  <meta name="twitter:title" content="coco" />
+  <meta name="twitter:description" content="moderation, music, tickets, and community tools for discord" />
+  <meta name="twitter:image" content="https://coco.aichi.me/og-image.png" />
+  
+  <meta name="description" content="moderation, music, tickets, and community tools for discord." />
+  <meta name="theme-color" content="#6b543c" />
+  
+  <link rel="stylesheet" href="/lite/static/styles.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+  <body>
+    <div class="page-shell">
+      <div class="diamond-rail left"></div>
+      <div class="diamond-rail right"></div>
+      <div class="page-inner">
+        <header class="topbar">
+          <div class="brand">
+            <span class="brand-mark"></span>
+            <span class="brand-name">coco</span>
+          </div>
+          <nav class="nav-links">
+            <a href="/">home</a>
+            <a href="/lite/dashboard">dashboard</a>
+            <a class="button button-tertiary" href="https://github.com/flwrcoaichi/coco">source</a>
+          </nav>
+        </header>
+        <section class="panel">
+          <p class="eyebrow">guides</p>
+          <h2>setting up ticketing</h2>
+          <ol>
+            <li>make a channel or category for tickets to open in.</li>
+            <li>run <code>/ticket panel #channel</code> - this posts the button members click to open a ticket.</li>
+            <li>optional: set a staff role and category from the dashboard's tickets tab, so new tickets ping staff and land in the right category.</li>
+            <li>staff can <code>/ticket add @member</code> to pull someone else into an open ticket, and <code>/ticket close</code> when it's done.</li>
+          </ol>
+        </section>
+ 
+        <section class="panel">
+          <h2>setting up color roles</h2>
+          <ol>
+            <li>create whatever color roles you want members to be able to pick (name and color are up to you).</li>
+            <li>members run <code>/color</code> and choose one - it swaps out any previous color role automatically.</li>
+            <li>no dashboard config needed; it reads from your server's existing roles.</li>
+          </ol>
+        </section>
+
+        <footer class="footer-credit">
+          created by <span class="pixel-avatar"></span> <a href="https://flowerco.aichi.me" id="source-link-footer">flowerco</a>
+        </footer>
+      </div>
+    </div>
+  </body>
+</html>

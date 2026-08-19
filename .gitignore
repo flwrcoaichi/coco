@@ -1,0 +1,12 @@
+.env
+data/
+!/src/data
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.db
+*.db-journal
+.DS_Store
+tests/
+.vscode/

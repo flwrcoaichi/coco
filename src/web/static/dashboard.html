@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+  <head>
+  <meta charset="utf-8" />
+  <title>coco - dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://coco.aichi.me/" />
+  <meta property="og:title" content="coco" />
+  <meta property="og:description" content="moderation, music, tickets, and community tools for discord." />
+  <meta property="og:image" content="https://coco.aichi.me/og-image.png" />
+  
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://coco.aichi.me/" />
+  <meta name="twitter:title" content="coco" />
+  <meta name="twitter:description" content="moderation, music, tickets, and community tools for discord" />
+  <meta name="twitter:image" content="https://coco.aichi.me/og-image.png" />
+  
+  <meta name="description" content="moderation, music, tickets, and community tools for discord." />
+  <meta name="theme-color" content="#6b543c" />
+  
+  <link rel="stylesheet" href="/lite/static/styles.css" />
+  <link rel="stylesheet" href="/lite/static/dashboard.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>
+    window.COCO_API_BASE = "https://flowerco.aichi.me";
+  </script>
+</head>
+  <body>
+    <div id="toast"></div>
+    <div class="page-shell">
+      <div class="diamond-rail left"></div>
+      <div class="diamond-rail right"></div>
+      <div class="page-inner">
+
+        <header class="topbar">
+          <div class="brand">
+            <span class="brand-mark"></span>
+            <span class="brand-name">coco</span>
+          </div>
+          <nav class="nav-links">
+            <div class="session-bar" id="session-bar" hidden>
+              <img class="avatar-ring" id="user-avatar" src="" alt="" />
+              <span id="guild-name">no server selected</span>
+            </div>
+            <span id="guild-name-anon" class="nav-links"></span>
+            <a href="/" class="button button-tertiary" id="login-link" hidden>log in</a>
+            <button id="logout-button" class="button button-secondary" hidden>sign out</button>
+          </nav>
+        </header>
+
+        <!-- signed-out -->
+        <section class="panel" id="signed-out-panel">
+          <p class="eyebrow">not signed in</p>
+          <h2>log in to manage your servers</h2>
+          <div class="button-row">
+            <a class="button button-primary" href="/" id="goto-login">go to home page to log in</a>
+          </div>
+        </section>
+
+        <!-- tabs (hidden until logged in) -->
+        <nav class="dash-tabs" id="dash-tabs" hidden>
+          <button class="dash-tab" data-panel="servers">servers</button>
+          <button class="dash-tab" data-panel="config">settings</button>
+          <button class="dash-tab" data-panel="moderation">moderation</button>
+          <button class="dash-tab" data-panel="tickets">tickets</button>
+          <button class="dash-tab" data-panel="builder">messages</button>
+          <button class="dash-tab" data-panel="actions">actions</button>
+        </nav>
+
+        <!-- servers -->
+        <section class="panel" data-panel-id="servers">
+          <div class="panel-title-row">
+            <div><p class="eyebrow">server selector</p><h2>choose a server</h2></div>
+          </div>
+          <div class="grid-list" id="guild-list"></div>
+        </section>
+
+        <!-- config / settings -->
+        <section class="panel" data-panel-id="config">
+          <div class="panel-title-row">
+            <div><p class="eyebrow">config</p><h2>server settings</h2></div>
+          </div>
+          <div class="config-grid" id="config-fields">
+            <div class="field-group" data-field="moderator_role"><label>moderator role</label><select></select></div>
+            <div class="field-group" data-field="admin_role"><label>admin role</label><select></select></div>
+            <div class="field-group" data-field="member_role"><label>member role</label><select></select></div>
+            <div class="field-group" data-field="image_role"><label>image perms role</label><select></select></div>
+            <div class="field-group" data-field="music_role"><label>music role</label><select></select></div>
+            <div class="field-group wide" data-field="announcement_channel"><label>announcement channel</label><select></select></div>
+            <div class="field-group wide" data-field="announcement_role"><label>announcement ping role</label><select></select></div>
+            <div class="field-group wide" data-field="join_channel"><label>join channel</label><select></select></div>
+            <div class="field-group wide" data-field="join_messages"><label>join messages (one per line — {user}, {mention}, {server})</label><textarea rows="3" placeholder="welcome to the server, {user}!"></textarea></div>
+            <div class="field-group wide" data-field="leave_channel"><label>leave channel</label><select></select></div>
+            <div class="field-group wide" data-field="leave_messages"><label>leave messages (one per line)</label><textarea rows="3" placeholder="{user} left the server."></textarea></div>
+            <div class="field-group wide checkbox-row" data-field="widget_enabled"><label><input type="checkbox" /> show server widget on this dashboard</label></div>
+          </div>
+          <div id="widget-preview" style="margin-top:14px"></div>
+          <div class="button-row">
+            <button id="save-config" class="button button-primary">save settings</button>
+          </div>
+        </section>
+
+        <!-- moderation -->
+        <section class="panel" data-panel-id="moderation">
+          <div class="panel-title-row">
+            <div><p class="eyebrow">moderation</p><h2>moderation settings</h2></div>
+          </div>
+          <div class="config-grid" id="moderation-fields">
+            <div class="field-group" data-field="mute_channel"><label>mute log channel</label><select></select></div>
+            <div class="field-group wide checkbox-group" data-field="lockdown_include_member_role"><label><input type="checkbox" /> lockdowns also silence the member role</label></div>
+            <div class="field-group wide checkbox-group" data-field="require_confirm"><label><input type="checkbox" /> require confirmation before mod actions</label></div>
+            <div class="field-group wide" data-field="warn_dm"><label>warn — dm (one per line, picked randomly)</label><textarea rows="2"></textarea></div>
+            <div class="field-group wide" data-field="warn_channel"><label>warn — channel message</label><textarea rows="2"></textarea></div>
+            <div class="field-group wide" data-field="kick_dm"><label>kick — dm</label><textarea rows="2"></textarea></div>
+            <div class="field-group wide" data-field="kick_channel"><label>kick — channel message</label><textarea rows="2"></textarea></div>
+            <div class="field-group wide" data-field="ban_dm"><label>ban — dm</label><textarea rows="2"></textarea></div>
+            <div class="field-group wide" data-field="ban_channel"><label>ban — channel message</label><textarea rows="2"></textarea></div>
+            <div class="field-group wide" data-field="mute_dm"><label>mute — dm</label><textarea rows="2"></textarea></div>
+            <div class="field-group wide" data-field="mute_channel_msg"><label>mute — channel message</label><textarea rows="2"></textarea></div>
+          </div>
+          <div class="button-row">
+            <button id="save-moderation" class="button button-primary">save moderation settings</button>
+          </div>
+        </section>
+
+        <!-- tickets -->
+        <section class="panel" data-panel-id="tickets">
+          <div class="panel-title-row">
+            <div><p class="eyebrow">ticketing</p><h2>ticket panels</h2></div>
+          </div>
+          <div class="info-note">a ticket panel is a message with an "open ticket" button. members click it to create a private thread.</div>
+          <div class="config-grid" style="margin-top:14px">
+            <div class="field-group wide"><label>panel channel (where the button is posted)</label><select id="ticket-panel-channel"></select></div>
+            <div class="field-group wide"><label>staff role (pinged and auto-added to every new ticket)</label><select id="ticket-panel-staff-role"></select></div>
+            <div class="field-group wide"><label>panel title</label><input id="ticket-panel-title" type="text" placeholder="support" /></div>
+            <div class="field-group wide"><label>panel description</label><input id="ticket-panel-description" type="text" placeholder="click below to open a ticket" /></div>
+          </div>
+          <div class="button-row">
+            <button id="create-ticket-panel" class="button button-primary">post ticket panel</button>
+          </div>
+          <div class="sub-section">
+            <h3>existing panels</h3>
+            <div id="ticket-panels-list" class="list-box"></div>
+          </div>
+        </section>
+
+        <!-- message builder -->
+        <section class="panel" data-panel-id="builder">
+          <div class="panel-title-row">
+            <div><p class="eyebrow">message/button creator</p><h2>create messages for roles, verification, etc</h2></div>
+          </div>
+          <div class="info-note">line breaks are automatically converted to \n. what you see in the preview is what gets posted.*</div>
+
+          <div class="builder-wrap">
+            <!-- left: controls -->
+            <div class="builder-controls">
+              <div class="field-group wide">
+                <label>message name (internal reference)</label>
+                <input id="builder-name" type="text" placeholder="rules, welcome, etc." />
+              </div>
+              <div class="field-group wide">
+                <label>message text (markdown-ish, \n for line breaks)</label>
+                <textarea id="builder-content" rows="5" placeholder="**welcome!** here are our rules..."></textarea>
+              </div>
+              <div class="field-group">
+                <label>accent color (hex)</label>
+                <input id="builder-accent" type="text" placeholder="#5865F2" value="#5865F2" />
+              </div>
+
+              <div class="sub-section" style="margin-top:10px;padding-top:10px">
+                <h3>buttons</h3>
+                <div id="btn-list"></div>
+                <div style="margin-top:10px">
+                  <button id="add-btn" class="button button-secondary" style="font-size:13px">+ add button</button>
+                </div>
+              </div>
+
+              <div class="sub-section" style="margin-top:10px;padding-top:10px">
+                <h3>post to channel</h3>
+                <div class="field-group wide">
+                  <label>channel</label>
+                  <select id="builder-channel"></select>
+                </div>
+                <div class="button-row">
+                  <button id="builder-post" class="button button-primary">post message</button>
+                  <button id="builder-save" class="button button-secondary">save without posting</button>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <p class="builder-preview-label">preview</p>
+              <div class="builder-canvas">
+                <div class="preview-container" id="preview-text">your message will appear here</div>
+                <div class="preview-buttons" id="preview-btns"></div>
+              </div>
+              <p style="font-size:14px;color:var(--ink-soft);margin-top:8px">*colors are approximate — discord renders its own accent styling.</p>
+            </div>
+          </div>
+
+          <div class="sub-section">
+            <h3>saved messages</h3>
+            <div id="saved-messages-list" class="list-box"></div>
+          </div>
+        </section>
+
+        <!-- actions -->
+        <section class="panel" data-panel-id="actions">
+          <div class="panel-title-row">
+            <div><p class="eyebrow">actions</p><h2>music &amp; bot controls</h2></div>
+          </div>
+          <div class="grid-list">
+            <button class="tile-action button button-tertiary" data-action="play">▶ play a song</button>
+            <button class="tile-action button button-tertiary" data-action="pause">⏸ pause</button>
+            <button class="tile-action button button-tertiary" data-action="resume">⏯ resume</button>
+            <button class="tile-action button button-tertiary" data-action="skip">⏭ skip track</button>
+            <button class="tile-action button button-tertiary" data-action="stop">⏹ stop &amp; disconnect</button>
+          </div>
+        </section>
+
+        <footer class="footer-credit">
+          created by <span class="pixel-avatar"></span> <a href="https://flowerco.aichi.me">flowerco</a>
+        </footer>
+      </div>
+    </div>
+    <script src="/lite/static/dashboard.js"></script>
+  </body>
+</html>
