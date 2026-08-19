@@ -1,18 +1,18 @@
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
 
 :root {
-  color-scheme: light;
-  --cream: #ede4cd;
-  --cream-deep: #e3d7b8;
-  --paper: #f7f0dc;
-  --ink: #3d2f22;
-  --ink-soft: #5b4a37;
-  --brown: #6b543c;
-  --brown-dark: #4a3728;
-  --accent: #b5451b;
-  --accent-soft: #d97b3f;
-  --good: #4a6741;
-  --danger: #a83232;
+  color-scheme: dark;
+  --cream: #1b2223;
+  --cream-deep: #101516;
+  --paper: #263031;
+  --ink: #f3ead7;
+  --ink-soft: #b8b9a8;
+  --brown: #596962;
+  --brown-dark: #0b0f10;
+  --accent: #e87852;
+  --accent-soft: #c5ad62;
+  --good: #82ab83;
+  --danger: #df6b6b;
   --font-display: 'Press Start 2P', monospace;
   --font-body: 'VT323', 'Courier New', monospace;
 }
@@ -37,8 +37,8 @@ body {
   color: var(--ink);
   background: var(--cream-deep);
   background-image:
-    repeating-linear-gradient(45deg, rgba(107, 84, 60, 0.08) 0 2px, transparent 2px 34px),
-    repeating-linear-gradient(-45deg, rgba(107, 84, 60, 0.08) 0 2px, transparent 2px 34px);
+    repeating-linear-gradient(45deg, rgba(197, 173, 98, 0.08) 0 2px, transparent 2px 34px),
+    repeating-linear-gradient(-45deg, rgba(197, 173, 98, 0.08) 0 2px, transparent 2px 34px);
 }
 
 
@@ -52,7 +52,7 @@ body {
   outline: 2px solid var(--cream);
   outline-offset: -10px;
   background: var(--cream);
-  box-shadow: 0 24px 0 rgba(61, 47, 34, 0.12);
+  box-shadow: 0 24px 0 rgba(0, 0, 0, 0.3);
   position: relative;
   overflow: hidden;
 }
@@ -228,20 +228,20 @@ button {
   cursor: pointer;
   background: var(--brown-dark);
   color: var(--paper);
-  box-shadow: 4px 4px 0 rgba(61, 47, 34, 0.35);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.42);
   transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
 
 .button:hover,
 button:hover {
   transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0 rgba(61, 47, 34, 0.35);
+  box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.42);
 }
 
 .button:active,
 button:active {
   transform: translate(0, 0);
-  box-shadow: 2px 2px 0 rgba(61, 47, 34, 0.35);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.42);
 }
 
 .button-primary {
@@ -255,7 +255,7 @@ button:active {
 .button-tertiary {
   background: var(--paper);
   color: var(--ink);
-  box-shadow: 4px 4px 0 rgba(61, 47, 34, 0.18);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.24);
 }
 
 .button-danger {
@@ -297,7 +297,7 @@ button:active {
   padding: 20px;
   background: var(--paper);
   border: 3px solid var(--brown-dark);
-  box-shadow: 6px 6px 0 rgba(61, 47, 34, 0.15);
+  box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.3);
 }
 
 .panel-title-row {
