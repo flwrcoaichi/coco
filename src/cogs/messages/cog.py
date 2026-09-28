@@ -43,33 +43,97 @@ _STYLE_MAP = {
 }
 
 
-def build_container_view(guild_id: int, container: dict) -> ui.ActionRow:
-    """builds an ActionRow of ContainerButtons for a saved container.
-    discord allows up to 5 buttons per row; containers beyond that would need
-    multiple rows, which callers should handle if/when that's needed."""
-    row: ui.ActionRow = ui.ActionRow()
-    for raw_item in container["items"][:5]:
+def build_container_rows(guild_id: int, container: dict) -> list[ui.ActionRow]:
+    """builds one or more ActionRows for a saved container.
+    Items may include separators and display groups to automatically split
+    rows while respecting the 5-button Discord limit."""
+    rows: list[ui.ActionRow] = []
+    current_row: ui.ActionRow | None = None
+    raw_items = container.get("items", [])
+    button_map: dict[str, dict] = {}
+    for raw_item in raw_items:
+        if isinstance(raw_item, dict) and "id" in raw_item:
+            button_map[str(raw_item["id"])] = raw_item
+
+    display_mode = any(isinstance(item, dict) and item.get("type") == "display" for item in raw_items)
+
+    def append_button(raw_item: dict) -> None:
+        nonlocal current_row
         if not isinstance(raw_item, dict) or "id" not in raw_item:
-            continue
-        style = _STYLE_MAP.get(raw_item.get("style", "secondary"), discord.ButtonStyle.secondary)
-        row.add_item(
+            return
+        if current_row is None:
+            current_row = ui.ActionRow()
+        elif len(current_row.children) >= 5:
+            rows.append(current_row)
+            current_row = ui.ActionRow()
+        style_name = raw_item.get("style", "secondary")
+        style = _STYLE_MAP.get(style_name, discord.ButtonStyle.secondary)
+        disabled = str(raw_item.get("action", "")).lower() == "disabled" or style_name == "disabled"
+        if disabled:
+            style = discord.ButtonStyle.secondary
+        current_row.add_item(
             ContainerButton(
                 guild_id=guild_id,
                 container_name=container["name"],
                 item_id=raw_item["id"],
                 label=raw_item.get("label", "click me"),
                 style=style,
+                disabled=disabled,
             )
         )
 
-    if len(row.children) == 0:
+    sequence: list[dict | str] = []
+    if display_mode:
+        for raw_item in raw_items:
+            if not isinstance(raw_item, dict):
+                continue
+            kind = raw_item.get("type")
+            if kind == "separator":
+                sequence.append({"__separator__": True})
+                continue
+            if kind == "display":
+                item_ids = raw_item.get("item_ids") or raw_item.get("items") or []
+                if isinstance(item_ids, str):
+                    item_ids = [part.strip() for part in item_ids.split(",") if part.strip()]
+                for item_id in item_ids:
+                    if isinstance(item_id, str):
+                        candidate = button_map.get(item_id)
+                        if candidate is not None:
+                            sequence.append(candidate)
+                continue
+        # Buttons that are defined but never referenced by a display group are ignored.
+    else:
+        for raw_item in raw_items:
+            if not isinstance(raw_item, dict):
+                continue
+            if raw_item.get("type") == "separator":
+                sequence.append({"__separator__": True})
+            elif "id" in raw_item:
+                sequence.append(raw_item)
+
+    for item in sequence:
+        if isinstance(item, dict) and item.get("__separator__") is True:
+            if current_row is not None and len(current_row.children) > 0:
+                rows.append(current_row)
+                current_row = None
+            continue
+        append_button(item)
+
+    if current_row is not None and len(current_row.children) > 0:
+        rows.append(current_row)
+
+    if not rows:
         log.warning(f"container {container['name']} has no valid buttons")
-        return None
-    
-    return row
+    return rows
 
 
-class ContainerButton(ui.DynamicItem[ui.Button[ui.View]], template=r"cm:c:(\d+):([0-9a-f]+)"):
+def build_container_view(guild_id: int, container: dict) -> ui.ActionRow | None:
+    """backwards-compatible wrapper returning the first row from a container."""
+    rows = build_container_rows(guild_id, container)
+    return rows[0] if rows else None
+
+
+class ContainerButton(ui.DynamicItem[ui.Button[ui.View]], template=r"cm:c:(\d+):([A-Za-z0-9_-]+)"):
     """persistent button backed by a button_containers row. the button's
     config (label/style/action/data) is looked up fresh from the db on every
     click by (guild_id, item_id), so editing a container via /buttons or the
@@ -80,9 +144,21 @@ class ContainerButton(ui.DynamicItem[ui.Button[ui.View]], template=r"cm:c:(\d+):
     under discord's 100-char limit regardless of how long a container name
     is - item_id is a short random per-guild token from new_item_id()."""
 
-    def __init__(self, *, guild_id: int, container_name: str, item_id: str, label: str, style: discord.ButtonStyle) -> None:
+    def __init__(
+        self,
+        *,
+        guild_id: int,
+        container_name: str,
+        item_id: str,
+        label: str,
+        style: discord.ButtonStyle,
+        disabled: bool = False,
+    ) -> None:
         item: ui.Button[ui.View] = ui.Button(
-            label=label, style=style, custom_id=f"cm:c:{guild_id}:{item_id}"
+            label=label,
+            style=style,
+            custom_id=f"cm:c:{guild_id}:{item_id}",
+            disabled=disabled,
         )
         super().__init__(item)
         self.guild_id = guild_id
@@ -101,9 +177,12 @@ class ContainerButton(ui.DynamicItem[ui.Button[ui.View]], template=r"cm:c:(\d+):
             item_id=item_id,
             label=item.label or "click me",
             style=item.style,
+            disabled=item.disabled,
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        if self.disabled:
+            return
         bot = interaction.client
         config = await find_item_by_id(bot.db, self.guild_id, self.item_id)  # type: ignore[attr-defined]
         if config is None:
@@ -220,7 +299,8 @@ class MessagesCog(commands.Cog, name="messages"):
                     ephemeral=True,
                 )
                 return
-            layout.add_item(build_container_view(interaction.guild.id, container))
+            for row in build_container_rows(interaction.guild.id, container):
+                layout.add_item(row)
 
         try:
             posted = await channel.send(view=layout)

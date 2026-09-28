@@ -2,29 +2,29 @@
 <html lang="en">
   <head>
   <meta charset="utf-8" />
-  <title>coco - dashboard</title>
+  <title>niskbot - dashboard</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://coco.aichi.me/" />
-  <meta property="og:title" content="coco" />
+  <meta property="og:title" content="niskbot" />
   <meta property="og:description" content="moderation, music, tickets, and community tools for discord." />
   <meta property="og:image" content="https://coco.aichi.me/og-image.png" />
   
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:url" content="https://coco.aichi.me/" />
-  <meta name="twitter:title" content="coco" />
+  <meta name="twitter:title" content="niskbot" />
   <meta name="twitter:description" content="moderation, music, tickets, and community tools for discord" />
   <meta name="twitter:image" content="https://coco.aichi.me/og-image.png" />
   
   <meta name="description" content="moderation, music, tickets, and community tools for discord." />
   <meta name="theme-color" content="#101516" />
   
-  <link rel="stylesheet" href="/lite/styles.css" />
-  <link rel="stylesheet" href="/lite/dashboard.css" />
+  <link rel="stylesheet" href="/niska/styles.css" />
+  <link rel="stylesheet" href="/niska/dashboard.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script>
-    window.COCO_API_BASE = "https://flowerco.aichi.me/lite";
+    window.COCO_API_BASE = "https://flowerco.aichi.me/niska";
   </script>
 </head>
   <body>
@@ -37,7 +37,7 @@
         <header class="topbar">
           <div class="brand">
             <span class="brand-mark"></span>
-            <span class="brand-name">coco lite</span>
+            <span class="brand-name">niskbot</span>
           </div>
           <nav class="nav-links">
             <div class="session-bar" id="session-bar" hidden>
@@ -55,7 +55,7 @@
           <p class="eyebrow">not signed in</p>
           <h2>log in to manage your servers</h2>
           <div class="button-row">
-            <a class="button button-primary" href="/lite" id="goto-login">go to home page to log in</a>
+            <a class="button button-primary" href="/niska" id="goto-login">go to home page to log in</a>
           </div>
         </section>
 
@@ -178,6 +178,18 @@
               </div>
 
               <div class="sub-section" style="margin-top:10px;padding-top:10px">
+                <h3>button layout</h3>
+                <textarea id="builder-layout" rows="6" placeholder="{b:pronouns:Pronouns:disabled:disabled}
+{b:he-him:he/him:secondary:{role:add:He/Him}}
+{display:pronouns,he-him}
+{separator}
+{display:pings,twitch,youtube,updates}"></textarea>
+                <div class="button-row" style="margin-top:10px">
+                  <button id="builder-render-layout" class="button button-secondary" style="font-size:13px">render layout</button>
+                </div>
+              </div>
+
+              <div class="sub-section" style="margin-top:10px;padding-top:10px">
                 <h3>post to channel</h3>
                 <div class="field-group wide">
                   <label>channel</label>
@@ -225,6 +237,6 @@
         </footer>
       </div>
     </div>
-    <script src="/lite/dashboard.js"></script>
+    <script src="/niska/dashboard.js"></script>
   </body>
 </html>

@@ -115,7 +115,7 @@ async function loadGuilds() {
   const guilds = await api("/api/guilds");
   const list = document.getElementById("guild-list");
   list.innerHTML = "";
-  if (!guilds?.length) { list.innerHTML = "<p>no servers found where you have admin permissions and coco is installed.</p>"; return; }
+  if (!guilds?.length) { list.innerHTML = "<p>no servers found where you have admin permissions and niskbot is installed.</p>"; return; }
   guilds.forEach(guild => {
     const button = document.createElement("button");
     button.className = "button button-secondary"; button.textContent = guild.name;
@@ -166,6 +166,81 @@ async function createTicketPanel() {
   result?.ok ? (toast("ticket panel posted"), loadTicketPanels()) : toast(result?.error || "failed", "err");
 }
 
+function parseBuilderLayout(rawText) {
+  if (!rawText || !rawText.trim()) return [];
+  const items = [];
+  const matches = [...rawText.matchAll(/\{([^{}]+)\}/g)];
+  matches.forEach(match => {
+    const value = String(match[1]).trim();
+    if (!value) return;
+    if (value === "separator") {
+      items.push({ type: "separator" });
+      return;
+    }
+    if (value.startsWith("display:")) {
+      const ids = value.slice("display:".length).split(",").map(item => item.trim()).filter(Boolean);
+      items.push({ type: "display", item_ids: ids });
+      return;
+    }
+    if (value.startsWith("b:")) {
+      const parts = value.slice(2).split(":");
+      const [id, label, style = "secondary", action = "disabled"] = parts;
+      items.push({ id: id || `button-${items.length}`, label: label || "button", style: style || "secondary", action: action || "disabled", data: {} });
+    }
+  });
+  return items;
+}
+
+function renderBuilderLayoutPreview() {
+  const rawText = document.getElementById("builder-layout")?.value || "";
+  const preview = document.getElementById("preview-btns");
+  if (!preview) return;
+  preview.innerHTML = "";
+  const items = parseBuilderLayout(rawText);
+  if (!items.length) {
+    preview.innerHTML = "<p class='builder-empty'>add a button layout to preview it.</p>";
+    return;
+  }
+
+  const rows = [];
+  let currentRow = [];
+  const buttonMap = {};
+  items.filter(item => item && item.id).forEach(item => { buttonMap[item.id] = item; });
+
+  const normalized = items.flatMap(item => {
+    if (item.type === "separator") return [{ __separator__: true }];
+    if (item.type === "display") {
+      const ids = Array.isArray(item.item_ids) ? item.item_ids : [];
+      return ids.map(id => buttonMap[id]).filter(Boolean);
+    }
+    return [item];
+  });
+
+  normalized.forEach(item => {
+    if (item && item.__separator__) {
+      if (currentRow.length) { rows.push(currentRow); currentRow = []; }
+      return;
+    }
+    if (currentRow.length >= 5) { rows.push(currentRow); currentRow = []; }
+    currentRow.push(item);
+  });
+  if (currentRow.length) rows.push(currentRow);
+
+  rows.forEach(row => {
+    const rowEl = document.createElement("div");
+    rowEl.className = "button-row";
+    row.forEach(item => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `button button-${item.style === "danger" ? "danger" : item.style === "primary" ? "primary" : item.style === "success" ? "success" : "secondary"}`;
+      btn.textContent = item.label || item.id || "button";
+      btn.disabled = item.action === "disabled" || item.style === "disabled";
+      rowEl.appendChild(btn);
+    });
+    preview.appendChild(rowEl);
+  });
+}
+
 async function loadSavedMessages() {
   if (!state.guild) return;
   const messages = await api(`/api/guild/${state.guild.id}/messages`);
@@ -186,6 +261,8 @@ async function init() {
   document.getElementById("save-config")?.addEventListener("click", saveConfig);
   document.getElementById("save-moderation")?.addEventListener("click", saveModeration);
   document.getElementById("create-ticket-panel")?.addEventListener("click", createTicketPanel);
+  document.getElementById("builder-render-layout")?.addEventListener("click", renderBuilderLayoutPreview);
+  document.getElementById("builder-layout")?.addEventListener("input", renderBuilderLayoutPreview);
 }
 
 init();

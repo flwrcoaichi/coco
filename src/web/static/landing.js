@@ -4,7 +4,7 @@ let clientId = null;
 
 async function loadClientId() {
   try {
-    const res = await fetch(`${API_BASE}/lite/api/config`);
+    const res = await fetch(`${API_BASE}/niska/api/config`);
     const data = await res.json();
     clientId = data.discord_client_id || null;
   } catch (e) {
@@ -40,7 +40,7 @@ function goToOauth() {
     alert("this bot isn't fully configured yet — DISCORD_CLIENT_ID is missing.");
     return;
   }
-  const redirect = encodeURIComponent(`${window.location.origin}/lite/dashboard`);
+  const redirect = encodeURIComponent(`${window.location.origin}/niska/dashboard`);
   window.location.href = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirect}&response_type=token&scope=identify%20guilds`;
 }
 
@@ -62,7 +62,7 @@ async function init() {
   if (user) {
     
     loginBtn.textContent = `${user.username}`;
-    loginBtn.addEventListener("click", () => window.location.href = "/lite/dashboard");
+    loginBtn.addEventListener("click", () => window.location.href = "/niska/dashboard");
     
     if (user.avatar) {
       const img = document.createElement("img");

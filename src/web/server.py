@@ -107,7 +107,7 @@ class DashboardServer:
         return response
 
     def _register_routes(self) -> None:
-        prefix = "/lite"
+        prefix = "/niska"
         self.app.router.add_get(prefix, self._serve_index)
         self.app.router.add_get(f"{prefix}/", self._serve_index)
         self.app.router.add_get(f"{prefix}/dashboard", self._serve_dashboard)
@@ -375,12 +375,6 @@ class DashboardServer:
                 await vc.disconnect(force=True)
             return web.json_response({"ok": True, "message": "stopped"})
 
-        if action == "open_twitch":
-            twitch_url = str(payload.get("url", "")).strip()
-            if not twitch_url:
-                return web.json_response({"error": "missing url"}, status=400)
-            return web.json_response({"ok": True, "url": twitch_url})
-
         return web.json_response({"error": "unknown action"}, status=400)
 
     async def _handle_get_ticket_panels(self, request: web.Request) -> web.Response:
@@ -575,7 +569,7 @@ class DashboardServer:
         import discord
         from src.cogs.messages.db import get_message, set_posted
         from src.data.button_containers import get_container
-        from src.cogs.messages.cog import build_container_view
+        from src.cogs.messages.cog import build_container_rows
         from src.utils.ui import BaseLayout
         guild_id = int(guild_id_str)
         name     = request.match_info["name"]
@@ -595,7 +589,8 @@ class DashboardServer:
         if msg.get("container_name"):
             container = await get_container(self.bot.db, guild_id, msg["container_name"])
             if container and container["items"]:
-                layout.add_item(build_container_view(guild_id, container))
+                for row in build_container_rows(guild_id, container):
+                    layout.add_item(row)
         try:
             posted = await channel.send(view=layout)
         except discord.HTTPException as exc:

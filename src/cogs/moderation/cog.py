@@ -373,7 +373,7 @@ class ModerationActionsCog(commands.Cog, name="moderation"):
         else:
             await execute(interaction)
 
-    @mod.command(name="mute", description="mute a member (discord timeout)")
+    @mod.command(name="mute", description="put a member in time out")
     @app_commands.describe(
         user="member to mute",
         reason="reason for the mute",

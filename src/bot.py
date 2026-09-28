@@ -5,18 +5,14 @@ from discord.ext import commands
 
 from src.config import BotConfig
 from src.data.db import Database
-from src.cogs.twitch.api import TwitchClient
 from src.utils.logger import get_logger
 
 log = get_logger("bot")
 
 INITIAL_EXTENSIONS = (
-    "src.cogs.economy.cog",
-    "src.cogs.colorroles.cog",
     "src.cogs.moderation.cog",
     "src.cogs.antiraid.cog",
     "src.cogs.ticketing.cog",
-    "src.cogs.twitch.cog",
     "src.cogs.music.queue",
     "src.cogs.music.cog",
     "src.cogs.radio.cog",
@@ -37,7 +33,6 @@ class Bot(commands.Bot):
         super().__init__(command_prefix=config.command_prefix, intents=intents)
         self.config = config
         self.db = Database(config.db_path)
-        self.twitch = TwitchClient()
 
     async def setup_hook(self) -> None:
         await self.db.connect()
