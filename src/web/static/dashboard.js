@@ -11,13 +11,19 @@ function toast(message, kind = "ok") {
 }
 
 function saveToken(token, expiresIn = 604800) {
-  localStorage.setItem("coco_token", token);
-  localStorage.setItem("coco_token_exp", String(Date.now() + expiresIn * 1000));
+  const safeToken = String(token || "").trim();
+  if (!safeToken) return false;
+  localStorage.setItem("coco_token", safeToken);
+  localStorage.setItem("coco_token_exp", String(Date.now() + Number(expiresIn || 604800) * 1000));
+  state.token = safeToken;
+  return true;
 }
 
 function clearToken() {
   localStorage.removeItem("coco_token");
   localStorage.removeItem("coco_token_exp");
+  state.token = null;
+  state.user = null;
 }
 
 function loadToken() {
@@ -32,7 +38,12 @@ async function api(path, options = {}) {
     ...options,
     headers: { Authorization: `Bearer ${state.token}`, "Content-Type": "application/json", ...(options.headers || {}) },
   });
-  if (response.status === 401) { clearToken(); showSignedOut(); return null; }
+  if (response.status === 401) {
+    if (state.token) {
+      signOut();
+    }
+    return null;
+  }
   try { return await response.json(); } catch { return null; }
 }
 
@@ -248,11 +259,20 @@ async function loadSavedMessages() {
   if (list) list.textContent = messages?.length ? `${messages.length} saved message(s)` : "no saved messages yet.";
 }
 
-function signOut() { clearToken(); state.token = null; state.guild = null; showSignedOut(); }
+function signOut() {
+  clearToken();
+  state.guild = null;
+  showSignedOut();
+}
 
 async function init() {
   const hash = new URLSearchParams(window.location.hash.substring(1));
-  if (hash.has("access_token")) { saveToken(hash.get("access_token"), Number(hash.get("expires_in") || 604800)); history.replaceState({}, document.title, window.location.pathname); }
+  if (hash.has("access_token")) {
+    const token = hash.get("access_token");
+    const expiresIn = Number(hash.get("expires_in") || 604800);
+    saveToken(token, expiresIn);
+    history.replaceState({}, document.title, window.location.pathname);
+  }
   state.token = loadToken();
   if (state.token) { state.user = await fetchCurrentUser(); if (state.user) { showDashboard(); await loadGuilds(); } else signOut(); }
   else showSignedOut();
