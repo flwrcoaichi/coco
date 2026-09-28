@@ -1,28 +1,38 @@
 from __future__ import annotations
 
+import asyncio
 import os
-from typing import TYPE_CHECKING
+import time
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import discord
 from aiohttp import web
 from discord import ui
 
-from src.config import BotConfig
+from src.cogs.messages.db import (
+    delete_message,
+    get_message,
+    list_messages,
+    set_posted,
+    upsert_message,
+)
+from src.cogs.messages.layout import compose_message
+from src.cogs.ticketing.cog import OpenTicketButton
+from src.cogs.ticketing.db import create_panel, get_ticket_panels, set_panel_message
 from src.data.button_containers import (
     delete_container,
+    get_container,
     get_containers,
     save_container,
 )
 from src.data.config import (
-    get_all_config,
-    set_config,
     delete_config,
+    get_all_config,
     get_moderation_config,
+    set_config,
     set_moderation_config,
 )
-from src.cogs.ticketing.cog import OpenTicketButton
-from src.cogs.ticketing.db import create_panel, get_ticket_panels, set_panel_message
 from src.utils.logger import get_logger
 from src.utils.ui import BaseLayout
 
@@ -33,6 +43,8 @@ log = get_logger("web.server")
 
 _DISCORD_API = "https://discord.com/api/v10"
 _ADMIN_BIT = 0x8
+_SESSION_TTL = 60.0
+_JS_SAFE_INT = 2**53
 
 
 def _auth_header(request: web.Request) -> str | None:
@@ -42,19 +54,34 @@ def _auth_header(request: web.Request) -> str | None:
     return auth[7:].strip() or None
 
 
-async def _fetch_discord_json(session: aiohttp.ClientSession, url: str, token: str) -> dict[str, object] | None:
-    async with session.get(url, headers={"Authorization": f"Bearer {token}"}) as resp:
-        if resp.status != 200:
-            return None
-        return await resp.json()
-
-
-def _is_admin_guild(guild_data: dict[str, object]) -> bool:
+def _is_admin_guild(guild_data: dict[str, Any]) -> bool:
     raw = str(guild_data.get("permissions", "0"))
     try:
         return bool(int(raw) & _ADMIN_BIT) or bool(guild_data.get("owner", False))
     except ValueError:
         return bool(guild_data.get("owner", False))
+
+
+def _safe(obj: Any) -> Any:
+    """snowflakes exceed JS's 2^53 integer limit and get silently rounded by
+    JSON.parse - send them as strings."""
+    if isinstance(obj, bool):
+        return obj
+    if isinstance(obj, int) and abs(obj) >= _JS_SAFE_INT:
+        return str(obj)
+    if isinstance(obj, dict):
+        return {k: _safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_safe(v) for v in obj]
+    return obj
+
+
+def _json(data: Any, status: int = 200) -> web.Response:
+    return web.json_response(_safe(data), status=status)
+
+
+def _err(message: str, status: int) -> web.Response:
+    return web.json_response({"error": message}, status=status)
 
 
 class DashboardServer:
@@ -66,6 +93,8 @@ class DashboardServer:
         self.app["session"] = None
         self.origin = self.config.dashboard_origin
         self._runner: web.AppRunner | None = None
+        self._auth_cache: dict[str, dict[str, Any]] = {}
+        self._auth_locks: dict[str, asyncio.Lock] = {}
 
         self.app.on_startup.append(self._on_startup)
         self.app.on_cleanup.append(self._on_cleanup)
@@ -86,16 +115,18 @@ class DashboardServer:
         if request.method == "OPTIONS":
             response: web.StreamResponse = web.Response(status=204)
         else:
-            response = await handler(request)
-    
+            try:
+                response = await handler(request)
+            except web.HTTPException as exc:
+                response = exc
+
         req_origin = request.headers.get("Origin", self.origin)
-        
         if "://" in req_origin:
-            scheme_host = req_origin.split("://", 1)
-            clean_origin = f"{scheme_host[0]}://{scheme_host[1].split('/')[0]}"
+            scheme, host = req_origin.split("://", 1)
+            clean_origin = f"{scheme}://{host.split('/')[0]}"
         else:
             clean_origin = req_origin
-    
+
         response.headers.update(
             {
                 "Access-Control-Allow-Origin": clean_origin,
@@ -114,6 +145,7 @@ class DashboardServer:
         self.app.router.add_get(f"{prefix}/docs", self._serve_docs)
         self.app.router.add_get(f"{prefix}/static/{{filename}}", self._serve_static)
         routes = (
+            ("GET", "/api/config", self._handle_public_config),
             ("GET", "/api/guilds", self._handle_guilds),
             ("GET", "/api/guild/{guild_id}/config", self._handle_get_config),
             ("POST", "/api/guild/{guild_id}/config", self._handle_set_config),
@@ -128,7 +160,6 @@ class DashboardServer:
             ("DELETE", "/api/guild/{guild_id}/containers/{name}", self._handle_delete_container),
             ("GET", "/api/guild/{guild_id}/state", self._handle_get_state),
             ("POST", "/api/guild/{guild_id}/actions/{action}", self._handle_action),
-            ("GET", "/api/config", self._handle_public_config),
             ("GET", "/api/guild/{guild_id}/messages", self._handle_list_messages),
             ("POST", "/api/guild/{guild_id}/messages", self._handle_save_message),
             ("POST", "/api/guild/{guild_id}/messages/{name}/send", self._handle_send_message),
@@ -150,355 +181,394 @@ class DashboardServer:
             await self._runner.cleanup()
             self._runner = None
 
-    async def _authenticated_user(self, request: web.Request) -> tuple[str, str] | web.Response:
+    async def _discord_get(self, path: str, token: str) -> tuple[int, Any]:
+        session: aiohttp.ClientSession = self.app["session"]
+        for attempt in range(3):
+            async with session.get(
+                f"{_DISCORD_API}{path}", headers={"Authorization": f"Bearer {token}"}
+            ) as resp:
+                if resp.status == 429 and attempt < 2:
+                    try:
+                        wait = float((await resp.json()).get("retry_after", 1))
+                    except Exception:
+                        wait = 1.0
+                    await asyncio.sleep(min(wait, 5))
+                    continue
+                body = await resp.json() if resp.status == 200 else None
+                return resp.status, body
+        return 429, None
+
+    def _prune_cache(self) -> None:
+        now = time.monotonic()
+        for token in [t for t, v in self._auth_cache.items() if v["exp"] <= now]:
+            self._auth_cache.pop(token, None)
+        for token in [t for t, lock in self._auth_locks.items() if t not in self._auth_cache and not lock.locked()]:
+            self._auth_locks.pop(token, None)
+
+    async def _session_info(self, token: str) -> dict[str, Any] | web.Response:
+        cached = self._auth_cache.get(token)
+        if cached and cached["exp"] > time.monotonic():
+            return cached
+        lock = self._auth_locks.setdefault(token, asyncio.Lock())
+        async with lock:
+            cached = self._auth_cache.get(token)
+            if cached and cached["exp"] > time.monotonic():
+                return cached
+            (user_status, user), (guilds_status, guilds) = await asyncio.gather(
+                self._discord_get("/users/@me", token),
+                self._discord_get("/users/@me/guilds", token),
+            )
+            if user_status == 401 or guilds_status == 401:
+                self._auth_cache.pop(token, None)
+                return _err("unauthorized", 401)
+            if user_status != 200 or guilds_status != 200 or not isinstance(guilds, list):
+                log.warning("discord lookup failed (user=%s guilds=%s)", user_status, guilds_status)
+                return _err("discord is rate limiting or unavailable, try again shortly", 503)
+            info = {
+                "user_id": str(user.get("id", "")),
+                "guilds": {str(g.get("id")): g for g in guilds},
+                "exp": time.monotonic() + _SESSION_TTL,
+            }
+            self._auth_cache[token] = info
+            if len(self._auth_cache) > 256:
+                self._prune_cache()
+            return info
+
+    async def _user(self, request: web.Request) -> dict[str, Any] | web.Response:
         token = _auth_header(request)
         if not token:
-            return web.json_response({"error": "unauthorized"}, status=401)
-        session: aiohttp.ClientSession = request.app["session"]
-        user = await _fetch_discord_json(session, f"{_DISCORD_API}/users/@me", token)
-        if user is None:
-            return web.json_response({"error": "unauthorized"}, status=401)
-        return token, str(user.get("id", ""))
+            return _err("unauthorized", 401)
+        return await self._session_info(token)
 
-    async def _check_guild_access(self, token: str, user_id: str, guild_id_str: str) -> web.Response | None:
-        guild = self.bot.get_guild(int(guild_id_str))
+    async def _guild(self, request: web.Request) -> tuple[int, int, discord.Guild] | web.Response:
+        info = await self._user(request)
+        if isinstance(info, web.Response):
+            return info
+        try:
+            guild_id = int(request.match_info["guild_id"])
+        except (KeyError, ValueError):
+            return _err("bad guild id", 400)
+        guild = self.bot.get_guild(guild_id)
         if guild is None:
-            return web.json_response({"error": "guild not found"}, status=404)
-        if user_id == str(guild.owner_id):
-            return None
-        session: aiohttp.ClientSession = self.app["session"]
-        guilds = await _fetch_discord_json(session, f"{_DISCORD_API}/users/@me/guilds", token)
-        if guilds is None:
-            return web.json_response({"error": "unauthorized"}, status=401)
-        if not any(str(g.get("id")) == guild_id_str and _is_admin_guild(g) for g in guilds):
-            return web.json_response({"error": "forbidden"}, status=403)
-        return None
+            return _err("guild not found", 404)
+        if info["user_id"] != str(guild.owner_id):
+            data = info["guilds"].get(str(guild_id))
+            if data is None or not _is_admin_guild(data):
+                return _err("forbidden", 403)
+        return guild_id, int(info["user_id"]), guild
 
     async def _handle_public_config(self, request: web.Request) -> web.Response:
-        """unauthenticated - tells the frontend which discord client id to use for
-        the oauth redirect, so it doesn't need to be hardcoded in static JS."""
-        return web.json_response({"discord_client_id": self.config.discord_client_id})
+        return _json({"discord_client_id": self.config.discord_client_id})
 
     async def _handle_guilds(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
-        if isinstance(auth, web.Response):
-            return auth
-        token, user_id = auth
-        session: aiohttp.ClientSession = request.app["session"]
-        guilds = await _fetch_discord_json(session, f"{_DISCORD_API}/users/@me/guilds", token)
-        if guilds is None:
-            return web.json_response({"error": "unauthorized"}, status=401)
+        info = await self._user(request)
+        if isinstance(info, web.Response):
+            return info
         bot_guilds = {str(g.id) for g in self.bot.guilds}
-        out: list[dict[str, object]] = []
-        for guild_data in guilds:
-            guild_id = str(guild_data.get("id", ""))
-            if guild_id not in bot_guilds:
-                continue
-            if not _is_admin_guild(guild_data):
-                continue
-            out.append({
-                "id": guild_id,
-                "name": str(guild_data.get("name", "")),
-                "icon": guild_data.get("icon"),
-            })
-        return web.json_response(out)
+        out = [
+            {"id": gid, "name": str(g.get("name", "")), "icon": g.get("icon")}
+            for gid, g in info["guilds"].items()
+            if gid in bot_guilds and _is_admin_guild(g)
+        ]
+        return _json(out)
 
     async def _handle_get_config(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
+        auth = await self._guild(request)
         if isinstance(auth, web.Response):
             return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied:
-            return denied
-        guild_id = int(guild_id_str)
-        config = await get_all_config(self.bot.db, guild_id)
-        return web.json_response(config)
+        return _json(await get_all_config(self.bot.db, auth[0]))
 
     async def _handle_set_config(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
+        auth = await self._guild(request)
         if isinstance(auth, web.Response):
             return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied:
-            return denied
-        guild_id = int(guild_id_str)
         payload = await request.json()
         for key, value in payload.items():
             if value is None or value == "":
-                await delete_config(self.bot.db, guild_id, key)
+                await delete_config(self.bot.db, auth[0], key)
             else:
-                await set_config(self.bot.db, guild_id, key, value)
-        return web.json_response({"ok": True})
+                await set_config(self.bot.db, auth[0], key, value)
+        return _json({"ok": True})
 
     async def _handle_get_moderation(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
+        auth = await self._guild(request)
         if isinstance(auth, web.Response):
             return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied:
-            return denied
-        config = await get_moderation_config(self.bot.db, int(guild_id_str))
-        return web.json_response(config)
+        return _json(await get_moderation_config(self.bot.db, auth[0]))
 
     async def _handle_set_moderation(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
+        auth = await self._guild(request)
         if isinstance(auth, web.Response):
             return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied:
-            return denied
-        payload = await request.json()
-        await set_moderation_config(self.bot.db, int(guild_id_str), payload)
-        return web.json_response({"ok": True})
+        await set_moderation_config(self.bot.db, auth[0], await request.json())
+        return _json({"ok": True})
 
     async def _handle_get_channels(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
+        auth = await self._guild(request)
         if isinstance(auth, web.Response):
             return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied:
-            return denied
-        guild = self.bot.get_guild(int(guild_id_str))
-        if guild is None:
-            return web.json_response({"error": "guild not found"}, status=404)
         channels = []
-        for channel in guild.channels:
+        for channel in auth[2].channels:
             if isinstance(channel, discord.TextChannel):
                 channels.append({"id": str(channel.id), "name": channel.name, "type": "text"})
             elif isinstance(channel, discord.CategoryChannel):
                 channels.append({"id": str(channel.id), "name": channel.name, "type": "category"})
-        return web.json_response(channels)
+        return _json(channels)
 
     async def _handle_get_roles(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
+        auth = await self._guild(request)
         if isinstance(auth, web.Response):
             return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied:
-            return denied
-        guild = self.bot.get_guild(int(guild_id_str))
-        if guild is None:
-            return web.json_response({"error": "guild not found"}, status=404)
         roles = [
-            {"id": str(role.id), "name": role.name, "color": f"#{role.color.value:06x}" if role.color.value else "#99aab5"}
-            for role in reversed(guild.roles)
+            {
+                "id": str(role.id),
+                "name": role.name,
+                "color": f"#{role.color.value:06x}" if role.color.value else "#99aab5",
+            }
+            for role in reversed(auth[2].roles)
             if not role.is_default() and not role.managed
         ]
-        return web.json_response(roles)
+        return _json(roles)
 
     async def _handle_get_state(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
+        auth = await self._guild(request)
         if isinstance(auth, web.Response):
             return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied:
-            return denied
-        guild_id = int(guild_id_str)
         queue_cog = self.bot.get_cog("queue")
         if queue_cog is None:
-            return web.json_response({"ok": False, "error": "queue missing"}, status=500)
-        state = queue_cog.get_state(guild_id)  # type: ignore[attr-defined]
-        return web.json_response({"ok": True, "state": state})
+            return _err("queue missing", 500)
+        return _json({"ok": True, "state": queue_cog.get_state(auth[0])})  # type: ignore[attr-defined]
 
     async def _handle_action(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
+        auth = await self._guild(request)
         if isinstance(auth, web.Response):
             return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied:
-            return denied
-        guild_id = int(guild_id_str)
+        guild_id, _, guild = auth
         action = request.match_info["action"]
         payload = await request.json()
         queue_cog = self.bot.get_cog("queue")
         music_cog = self.bot.get_cog("music")
-        guild = self.bot.get_guild(guild_id)
-        if guild is None:
-            return web.json_response({"error": "guild not found"}, status=404)
 
         if action == "play":
             url = str(payload.get("url", "")).strip()
             if not url:
-                return web.json_response({"error": "missing url"}, status=400)
+                return _err("missing url", 400)
             if music_cog is None:
-                return web.json_response({"error": "music disabled"}, status=500)
-            voice_channel_id = int(payload.get("voice_channel_id", 0))
+                return _err("music disabled", 500)
+            voice_channel_id = int(payload.get("voice_channel_id", 0) or 0)
             voice_channel = guild.get_channel(voice_channel_id) if voice_channel_id else None
-            ok, message = await music_cog.queue_from_url(guild_id, url, voice_channel if isinstance(voice_channel, discord.VoiceChannel) else None)  # type: ignore[attr-defined]
-            return web.json_response({"ok": ok, "message": message})
+            ok, message = await music_cog.queue_from_url(  # type: ignore[attr-defined]
+                guild_id, url, voice_channel if isinstance(voice_channel, discord.VoiceChannel) else None
+            )
+            return _json({"ok": ok, "message": message})
 
+        vc = guild.voice_client
         if action == "pause":
-            vc = guild.voice_client
-            if vc is None or not isinstance(vc, discord.VoiceClient):
-                return web.json_response({"error": "not connected"}, status=400)
+            if not isinstance(vc, discord.VoiceClient):
+                return _err("not connected", 400)
             if not vc.is_playing():
-                return web.json_response({"error": "not playing"}, status=400)
+                return _err("not playing", 400)
             vc.pause()
-            return web.json_response({"ok": True, "message": "paused"})
+            return _json({"ok": True, "message": "paused"})
 
         if action == "resume":
-            vc = guild.voice_client
-            if vc is None or not isinstance(vc, discord.VoiceClient):
-                return web.json_response({"error": "not connected"}, status=400)
+            if not isinstance(vc, discord.VoiceClient):
+                return _err("not connected", 400)
             if not vc.is_paused():
-                return web.json_response({"error": "not paused"}, status=400)
+                return _err("not paused", 400)
             vc.resume()
-            return web.json_response({"ok": True, "message": "resumed"})
+            return _json({"ok": True, "message": "resumed"})
 
         if action in {"skip", "stop"}:
             if queue_cog is None:
-                return web.json_response({"error": "queue missing"}, status=500)
-            vc = guild.voice_client
+                return _err("queue missing", 500)
             if action == "skip":
-                if vc is None or not isinstance(vc, discord.VoiceClient) or not vc.is_playing():
-                    return web.json_response({"error": "not playing"}, status=400)
+                if not isinstance(vc, discord.VoiceClient) or not vc.is_playing():
+                    return _err("not playing", 400)
                 queue_cog.skip(guild_id, vc)  # type: ignore[attr-defined]
-                return web.json_response({"ok": True, "message": "skipped"})
+                return _json({"ok": True, "message": "skipped"})
             queue_cog.clear(guild_id)  # type: ignore[attr-defined]
             if isinstance(vc, discord.VoiceClient):
                 await vc.disconnect(force=True)
-            return web.json_response({"ok": True, "message": "stopped"})
+            return _json({"ok": True, "message": "stopped"})
 
-        return web.json_response({"error": "unknown action"}, status=400)
+        return _err("unknown action", 400)
 
     async def _handle_get_ticket_panels(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
+        auth = await self._guild(request)
         if isinstance(auth, web.Response):
             return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied:
-            return denied
-        guild_id = int(guild_id_str)
-        panels = await get_ticket_panels(self.bot.db, guild_id)
-        return web.json_response(panels)
+        return _json(await get_ticket_panels(self.bot.db, auth[0]))
 
     async def _handle_create_ticket_panel(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
+        auth = await self._guild(request)
         if isinstance(auth, web.Response):
             return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied:
-            return denied
-        guild_id = int(guild_id_str)
+        guild_id, _, guild = auth
         payload = await request.json()
-        channel_id = int(payload.get("channel_id", 0))
+        channel_id = int(payload.get("channel_id") or 0)
         if channel_id <= 0:
-            return web.json_response({"error": "missing channel_id"}, status=400)
+            return _err("missing channel_id", 400)
         title = str(payload.get("title", "support")).strip() or "support"
-        description = str(payload.get("description", "click below to open a ticket")).strip() or "click below to open a ticket"
-        category_id = int(payload.get("category_id", 0)) if payload.get("category_id") else 0
-        staff_role_id = int(payload.get("staff_role_id", 0)) if payload.get("staff_role_id") else 0
-
-        guild = self.bot.get_guild(guild_id)
-        if guild is None:
-            return web.json_response({"error": "guild not found"}, status=404)
+        description = str(payload.get("description", "")).strip() or "click below to open a ticket"
+        category_id = int(payload.get("category_id") or 0)
+        staff_role_id = int(payload.get("staff_role_id") or 0)
 
         channel = guild.get_channel(channel_id)
-        if channel is None or not isinstance(channel, discord.TextChannel):
-            return web.json_response({"error": "channel not found or not a text channel"}, status=404)
+        if not isinstance(channel, discord.TextChannel):
+            return _err("channel not found or not a text channel", 404)
 
         panel_id = await create_panel(
-            self.bot.db,
-            guild_id,
-            channel_id,
-            category_id,
-            staff_role_id,
-            title,
-            description,
+            self.bot.db, guild_id, channel_id, category_id, staff_role_id, title, description
         )
         layout = BaseLayout()
         layout.add_container(ui.TextDisplay(f"# {title}\n{description}"), accent_color=0x5865F2)
         layout.add_item(ui.ActionRow(OpenTicketButton(panel_id)))
-
         try:
             msg = await channel.send(view=layout)
         except discord.HTTPException as exc:
-            return web.json_response({"error": f"failed to send ticket panel message: {exc}"}, status=500)
+            return _err(f"failed to send ticket panel message: {exc}", 500)
 
         await set_panel_message(self.bot.db, panel_id, msg.id)
-        return web.json_response({"ok": True, "panel_id": panel_id, "message_id": msg.id})
+        return _json({"ok": True, "panel_id": panel_id, "message_id": msg.id})
 
     async def _handle_get_containers(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
+        auth = await self._guild(request)
         if isinstance(auth, web.Response):
             return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied:
-            return denied
-        guild_id = int(guild_id_str)
-        containers = await get_containers(self.bot.db, guild_id)
-        return web.json_response(containers)
+        return _json(await get_containers(self.bot.db, auth[0]))
 
     async def _handle_save_container(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
+        auth = await self._guild(request)
         if isinstance(auth, web.Response):
             return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied:
-            return denied
-        guild_id = int(guild_id_str)
         body = await request.json()
         name = str(body.get("name", "")).strip()
         items = body.get("items")
         accent_color = body.get("accent_color")
         if not name:
-            return web.json_response({"error": "missing container name"}, status=400)
+            return _err("missing container name", 400)
         if not isinstance(items, list):
-            return web.json_response({"error": "items must be a list"}, status=400)
-
-        if accent_color is not None:
-            try:
-                accent_color = int(accent_color)
-            except (TypeError, ValueError):
-                accent_color = None
-
-        await save_container(
-            self.bot.db,
-            guild_id,
-            name,
-            int(user_id),
-            items,
-            accent_color,
-        )
-        return web.json_response({"ok": True})
+            return _err("items must be a list", 400)
+        try:
+            accent_color = int(accent_color) if accent_color is not None else None
+        except (TypeError, ValueError):
+            accent_color = None
+        await save_container(self.bot.db, auth[0], name, auth[1], items, accent_color)
+        return _json({"ok": True})
 
     async def _handle_delete_container(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
+        auth = await self._guild(request)
         if isinstance(auth, web.Response):
             return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied:
-            return denied
-        guild_id = int(guild_id_str)
+        await delete_container(self.bot.db, auth[0], request.match_info["name"])
+        return _json({"ok": True})
+
+    async def _handle_list_messages(self, request: web.Request) -> web.Response:
+        auth = await self._guild(request)
+        if isinstance(auth, web.Response):
+            return auth
+        msgs = await list_messages(self.bot.db, auth[0])
+        containers = {c["name"]: c for c in await get_containers(self.bot.db, auth[0])}
+        for m in msgs:
+            c = containers.get(m["container_name"]) if m["container_name"] else None
+            m["items"] = c["items"] if c else []
+            m["accent_color"] = c["accent_color"] if c else None
+        return _json(msgs)
+
+    async def _handle_save_message(self, request: web.Request) -> web.Response:
+        auth = await self._guild(request)
+        if isinstance(auth, web.Response):
+            return auth
+        payload = await request.json()
+        name = str(payload.get("name", "")).strip()
+        content = str(payload.get("content", "")).strip()
+        if not name or not content:
+            return _err("name and content required", 400)
+        existing = await get_message(self.bot.db, auth[0], name)
+        await upsert_message(
+            self.bot.db,
+            auth[0],
+            name,
+            content,
+            str(payload.get("action", existing["action"] if existing else "none")),
+            existing["action_role_id"] if existing else 0,
+            existing["action_emoji"] if existing else "",
+            payload.get("container") or None,
+            auth[1],
+        )
+        return _json({"ok": True})
+
+    async def _handle_send_message(self, request: web.Request) -> web.Response:
+        auth = await self._guild(request)
+        if isinstance(auth, web.Response):
+            return auth
+        guild_id, _, guild = auth
         name = request.match_info["name"]
-        await delete_container(self.bot.db, guild_id, name)
-        return web.json_response({"ok": True})
+        payload = await request.json()
+        msg = await get_message(self.bot.db, guild_id, name)
+        if msg is None:
+            return _err("message not found", 404)
+        container = None
+        if msg["container_name"]:
+            container = await get_container(self.bot.db, guild_id, msg["container_name"])
+        layout = compose_message(guild_id, msg["content"], container)
+
+        if payload.get("update"):
+            channel = guild.get_channel(int(msg["channel_id"] or 0))
+            if not isinstance(channel, discord.TextChannel) or not msg["message_id"]:
+                return _err("this message hasn't been posted yet", 404)
+            try:
+                posted = await channel.fetch_message(int(msg["message_id"]))
+                await posted.edit(view=layout)
+            except discord.NotFound:
+                return _err("the posted message was deleted - send it again", 404)
+            except discord.HTTPException as exc:
+                return _err(str(exc), 500)
+            return _json({"ok": True, "message_id": posted.id})
+
+        channel = guild.get_channel(int(payload.get("channel_id") or 0))
+        if not isinstance(channel, discord.TextChannel):
+            return _err("channel not found or not a text channel", 404)
+        try:
+            posted = await channel.send(view=layout)
+        except discord.HTTPException as exc:
+            return _err(str(exc), 500)
+        await set_posted(self.bot.db, guild_id, name, channel.id, posted.id)
+        return _json({"ok": True, "message_id": posted.id})
+
+    async def _handle_update_message(self, request: web.Request) -> web.Response:
+        auth = await self._guild(request)
+        if isinstance(auth, web.Response):
+            return auth
+        name = request.match_info["name"]
+        msg = await get_message(self.bot.db, auth[0], name)
+        if msg is None:
+            return _err("message not found", 404)
+        payload = await request.json()
+        await upsert_message(
+            self.bot.db,
+            auth[0],
+            name,
+            payload.get("content", msg["content"]),
+            msg["action"],
+            msg["action_role_id"],
+            msg["action_emoji"],
+            payload.get("container", msg["container_name"]),
+            auth[1],
+        )
+        return _json({"ok": True})
+
+    async def _handle_delete_message(self, request: web.Request) -> web.Response:
+        auth = await self._guild(request)
+        if isinstance(auth, web.Response):
+            return auth
+        name = request.match_info["name"]
+        msg = await get_message(self.bot.db, auth[0], name)
+        await delete_message(self.bot.db, auth[0], name)
+        if msg and msg["container_name"] == name:
+            await delete_container(self.bot.db, auth[0], name)
+        return _json({"ok": True})
 
     async def _serve_index(self, request: web.Request) -> web.Response:
         return await self._serve_html("index.html")
@@ -517,7 +587,7 @@ class DashboardServer:
     async def _serve_static(self, request: web.Request) -> web.Response:
         filename = request.match_info["filename"]
         path = os.path.join(os.path.dirname(__file__), "static", filename)
-        if not os.path.exists(path) or ".." in filename:
+        if ".." in filename or not os.path.exists(path):
             raise web.HTTPNotFound()
         content_type = "text/plain"
         if filename.endswith(".js"):
@@ -526,109 +596,3 @@ class DashboardServer:
             content_type = "text/css"
         with open(path, "r", encoding="utf-8") as file:
             return web.Response(text=file.read(), content_type=content_type)
-
-    async def _handle_list_messages(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
-        if isinstance(auth, web.Response): return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied: return denied
-        from src.cogs.messages.db import list_messages
-        msgs = await list_messages(self.bot.db, int(guild_id_str))
-        return web.json_response(msgs)
- 
-    async def _handle_save_message(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
-        if isinstance(auth, web.Response): return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied: return denied
-        from src.cogs.messages.db import upsert_message
-        payload = await request.json()
-        name      = str(payload.get("name", "")).strip()
-        content   = str(payload.get("content", "")).strip()
-        action    = str(payload.get("action", "none"))
-        container = payload.get("container") or None
-        if not name or not content:
-            return web.json_response({"error": "name and content required"}, status=400)
-        await upsert_message(
-            self.bot.db, int(guild_id_str), name, content, action,
-            0, "", container, int(user_id),
-        )
-        return web.json_response({"ok": True})
- 
-    async def _handle_send_message(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
-        if isinstance(auth, web.Response): return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied: return denied
-        import discord
-        from src.cogs.messages.db import get_message, set_posted
-        from src.data.button_containers import get_container
-        from src.cogs.messages.cog import build_container_layout
-        from src.utils.ui import BaseLayout
-        guild_id = int(guild_id_str)
-        name     = request.match_info["name"]
-        payload  = await request.json()
-        channel_id = int(payload.get("channel_id", 0))
-        msg = await get_message(self.bot.db, guild_id, name)
-        if msg is None:
-            return web.json_response({"error": "message not found"}, status=404)
-        guild = self.bot.get_guild(guild_id)
-        if guild is None:
-            return web.json_response({"error": "guild not found"}, status=404)
-        channel = guild.get_channel(channel_id)
-        if not isinstance(channel, discord.TextChannel):
-            return web.json_response({"error": "channel not found or not a text channel"}, status=404)
-        layout = BaseLayout()
-        layout.add_container(discord.ui.TextDisplay(msg["content"]), accent_color=0x5865F2)
-        if msg.get("container_name"):
-            container = await get_container(self.bot.db, guild_id, msg["container_name"])
-            if container and container["items"]:
-                for item in build_container_layout(guild_id, container):
-                    layout.add_item(item)
-        try:
-            posted = await channel.send(view=layout)
-        except discord.HTTPException as exc:
-            return web.json_response({"error": str(exc)}, status=500)
-        await set_posted(self.bot.db, guild_id, name, channel_id, posted.id)
-        return web.json_response({"ok": True, "message_id": posted.id})
-    
-    async def _handle_update_message(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
-        if isinstance(auth, web.Response): return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied: return denied
-        from src.cogs.messages.db import upsert_message, get_message
-        guild_id = int(guild_id_str)
-        name = request.match_info["name"]
-        msg = await get_message(self.bot.db, guild_id, name)
-        if msg is None:
-            return web.json_response({"error": "message not found"}, status=404)
-        payload = await request.json()
-        content   = payload.get("content", msg["content"])
-        container = payload.get("container", msg["container_name"])
-        await upsert_message(
-            self.bot.db, guild_id, name, content, msg["action"],
-            msg["action_role_id"], msg["action_emoji"], container, int(user_id),
-        )
-        return web.json_response({"ok": True})
-
-    async def _handle_delete_message(self, request: web.Request) -> web.Response:
-        auth = await self._authenticated_user(request)
-        if isinstance(auth, web.Response): return auth
-        token, user_id = auth
-        guild_id_str = request.match_info["guild_id"]
-        denied = await self._check_guild_access(token, user_id, guild_id_str)
-        if denied: return denied
-        from src.cogs.messages.db import delete_message
-        guild_id = int(guild_id_str)
-        name = request.match_info["name"]
-        await delete_message(self.bot.db, guild_id, name)
-        return web.json_response({"ok": True})

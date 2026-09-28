@@ -4,22 +4,22 @@
   <meta charset="utf-8" />
   <title>niskbot - dashboard</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  
+
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://coco.aichi.me/" />
   <meta property="og:title" content="niskbot" />
   <meta property="og:description" content="moderation, music, tickets, and community tools for discord." />
   <meta property="og:image" content="https://coco.aichi.me/og-image.png" />
-  
+
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:url" content="https://coco.aichi.me/" />
   <meta name="twitter:title" content="niskbot" />
   <meta name="twitter:description" content="moderation, music, tickets, and community tools for discord" />
   <meta name="twitter:image" content="https://coco.aichi.me/og-image.png" />
-  
+
   <meta name="description" content="moderation, music, tickets, and community tools for discord." />
   <meta name="theme-color" content="#101516" />
-  
+
   <link rel="stylesheet" href="/niska/styles.css" />
   <link rel="stylesheet" href="/niska/dashboard.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -50,7 +50,6 @@
           </nav>
         </header>
 
-        <!-- signed-out -->
         <section class="panel" id="signed-out-panel">
           <p class="eyebrow">not signed in</p>
           <h2>log in to manage your servers</h2>
@@ -59,7 +58,6 @@
           </div>
         </section>
 
-        <!-- tabs (hidden until logged in) -->
         <nav class="dash-tabs" id="dash-tabs" hidden>
           <button class="dash-tab" data-panel="servers">servers</button>
           <button class="dash-tab" data-panel="config">settings</button>
@@ -69,7 +67,6 @@
           <button class="dash-tab" data-panel="actions">actions</button>
         </nav>
 
-        <!-- servers -->
         <section class="panel" data-panel-id="servers">
           <div class="panel-title-row">
             <div><p class="eyebrow">server selector</p><h2>choose a server</h2></div>
@@ -77,7 +74,6 @@
           <div class="grid-list" id="guild-list"></div>
         </section>
 
-        <!-- config / settings -->
         <section class="panel" data-panel-id="config">
           <div class="panel-title-row">
             <div><p class="eyebrow">config</p><h2>server settings</h2></div>
@@ -94,7 +90,7 @@
             <div class="field-group wide" data-field="join_messages"><label>join messages (one per line — {user}, {mention}, {server})</label><textarea rows="3" placeholder="welcome to the server, {user}!"></textarea></div>
             <div class="field-group wide" data-field="leave_channel"><label>leave channel</label><select></select></div>
             <div class="field-group wide" data-field="leave_messages"><label>leave messages (one per line)</label><textarea rows="3" placeholder="{user} left the server."></textarea></div>
-            <div class="field-group wide checkbox-row" data-field="widget_enabled"><label><input type="checkbox" /> show server widget on this dashboard</label></div>
+            <div class="field-group wide checkbox-group" data-field="widget_enabled"><label><input type="checkbox" /> show server widget on this dashboard</label></div>
           </div>
           <div id="widget-preview" style="margin-top:14px"></div>
           <div class="button-row">
@@ -102,7 +98,6 @@
           </div>
         </section>
 
-        <!-- moderation -->
         <section class="panel" data-panel-id="moderation">
           <div class="panel-title-row">
             <div><p class="eyebrow">moderation</p><h2>moderation settings</h2></div>
@@ -125,7 +120,6 @@
           </div>
         </section>
 
-        <!-- tickets -->
         <section class="panel" data-panel-id="tickets">
           <div class="panel-title-row">
             <div><p class="eyebrow">ticketing</p><h2>ticket panels</h2></div>
@@ -146,69 +140,63 @@
           </div>
         </section>
 
-        <!-- message builder -->
         <section class="panel" data-panel-id="builder">
           <div class="panel-title-row">
-            <div><p class="eyebrow">message/button creator</p><h2>create messages for roles, verification, etc</h2></div>
+            <div><p class="eyebrow">message creator</p><h2>build messages with buttons</h2></div>
+            <button id="builder-reset" class="button button-tertiary">new message</button>
           </div>
-          <div class="info-note">line breaks are automatically converted to \n. what you see in the preview is what gets posted.*</div>
+          <div class="info-note">write your message, then add buttons. use <b>separator</b> for a divider line and <b>new row</b> to start a fresh row of buttons. the preview mirrors what gets posted.</div>
 
           <div class="builder-wrap">
-            <!-- left: controls -->
             <div class="builder-controls">
               <div class="field-group wide">
-                <label>message name (internal reference)</label>
-                <input id="builder-name" type="text" placeholder="rules, welcome, etc." />
+                <label>message name</label>
+                <input id="builder-name" type="text" placeholder="rules, welcome, roles..." />
               </div>
               <div class="field-group wide">
-                <label>message text (markdown-ish, \n for line breaks)</label>
-                <textarea id="builder-content" rows="5" placeholder="**welcome!** here are our rules..."></textarea>
+                <label>message text — <span class="hint">**bold** *italic* `code` # heading -# small</span></label>
+                <textarea id="builder-content" rows="6" placeholder="**welcome!** pick your roles below"></textarea>
               </div>
-              <div class="field-group">
-                <label>accent color (hex)</label>
-                <input id="builder-accent" type="text" placeholder="#5865F2" value="#5865F2" />
+              <div class="field-group wide">
+                <label>accent color</label>
+                <div class="color-row">
+                  <input id="builder-accent" type="color" value="#5865f2" />
+                  <span id="builder-accent-hex" class="hint">#5865f2</span>
+                </div>
               </div>
 
-              <div class="sub-section" style="margin-top:10px;padding-top:10px">
-                <h3>buttons</h3>
+              <div class="sub-section">
+                <h3>components</h3>
                 <div id="btn-list"></div>
-                <div style="margin-top:10px">
-                  <button id="add-btn" class="button button-secondary" style="font-size:13px">+ add button</button>
+                <div class="button-row add-row">
+                  <button id="add-btn" class="button button-secondary">+ button</button>
+                  <button id="add-sep" class="button button-tertiary">+ separator</button>
+                  <button id="add-break" class="button button-tertiary">+ new row</button>
                 </div>
               </div>
 
-              <div class="sub-section" style="margin-top:10px;padding-top:10px">
-                <h3>button layout</h3>
-                <textarea id="builder-layout" rows="6" placeholder="{b:pronouns:Pronouns:disabled:disabled}
-{b:he-him:he/him:secondary:{role:add:He/Him}}
-{display:pronouns,he-him}
-{separator}
-{display:pings,twitch,youtube,updates}"></textarea>
-                <div class="button-row" style="margin-top:10px">
-                  <button id="builder-render-layout" class="button button-secondary" style="font-size:13px">render layout</button>
-                </div>
-              </div>
-
-              <div class="sub-section" style="margin-top:10px;padding-top:10px">
-                <h3>post to channel</h3>
+              <div class="sub-section">
+                <h3>post</h3>
                 <div class="field-group wide">
                   <label>channel</label>
                   <select id="builder-channel"></select>
                 </div>
                 <div class="button-row">
-                  <button id="builder-post" class="button button-primary">post message</button>
-                  <button id="builder-save" class="button button-secondary">save without posting</button>
+                  <button id="builder-post" class="button button-primary">save &amp; post</button>
+                  <button id="builder-save" class="button button-secondary">save only</button>
                 </div>
               </div>
             </div>
 
-            <div>
+            <div class="builder-side">
               <p class="builder-preview-label">preview</p>
               <div class="builder-canvas">
-                <div class="preview-container" id="preview-text">your message will appear here</div>
-                <div class="preview-buttons" id="preview-btns"></div>
+                <div class="preview-container" id="preview-container">
+                  <div id="preview-text" class="md"></div>
+                  <div id="preview-btns"></div>
+                </div>
               </div>
-              <p style="font-size:14px;color:var(--ink-soft);margin-top:8px">*colors are approximate — discord renders its own accent styling.</p>
+              <p class="hint" style="margin-top:8px">colors and spacing are approximate — discord renders its own styling.</p>
             </div>
           </div>
 
@@ -218,7 +206,6 @@
           </div>
         </section>
 
-        <!-- actions -->
         <section class="panel" data-panel-id="actions">
           <div class="panel-title-row">
             <div><p class="eyebrow">actions</p><h2>music &amp; bot controls</h2></div>
