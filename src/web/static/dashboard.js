@@ -152,6 +152,7 @@ async function selectGuild(guild) {
   loadFields(document.getElementById("config-fields"), configFields, config || {});
   fillSelect(document.getElementById("ticket-panel-channel"), state.textChannels);
   fillSelect(document.getElementById("ticket-panel-staff-role"), state.roles);
+  fillSelect(document.getElementById("builder-channel"), state.textChannels);
   showPanel("config");
 }
 
@@ -186,28 +187,69 @@ async function createTicketPanel() {
   result?.ok ? (toast("ticket panel posted"), loadTicketPanels()) : toast(result?.error || "failed", "err");
 }
 
+function splitTopLevel(text, delimiter = ":") {
+  if (!text) return [];
+  const parts = [];
+  let current = "";
+  let depth = 0;
+  for (const ch of text) {
+    if (ch === "{") depth += 1;
+    if (ch === "}") depth = Math.max(0, depth - 1);
+    if (ch === delimiter && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim() || parts.length) {
+    parts.push(current.trim());
+  }
+  return parts.filter(part => part !== "");
+}
+
 function parseBuilderLayout(rawText) {
   if (!rawText || !rawText.trim()) return [];
   const items = [];
-  const matches = [...rawText.matchAll(/\{([^{}]+)\}/g)];
-  matches.forEach(match => {
-    const value = String(match[1]).trim();
-    if (!value) return;
-    if (value === "separator") {
-      items.push({ type: "separator" });
-      return;
+  let depth = 0;
+  let start = -1;
+  for (let i = 0; i < rawText.length; i += 1) {
+    const ch = rawText[i];
+    if (ch === "{") {
+      if (depth === 0) start = i + 1;
+      depth += 1;
+      continue;
     }
-    if (value.startsWith("display:")) {
-      const ids = value.slice("display:".length).split(",").map(item => item.trim()).filter(Boolean);
-      items.push({ type: "display", item_ids: ids });
-      return;
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        const block = rawText.slice(start, i).trim();
+        if (!block) { start = -1; continue; }
+        if (block === "separator") {
+          items.push({ type: "separator" });
+        } else if (block.startsWith("display:")) {
+          const ids = block.slice("display:".length).split(",").map(part => part.trim()).filter(Boolean);
+          items.push({ type: "display", item_ids: ids });
+        } else if (block.startsWith("b:")) {
+          const remainder = block.slice(2);
+          const parts = splitTopLevel(remainder);
+          const id = parts[0] || `button-${items.length}`;
+          const label = parts[1] || id;
+          const style = (parts[2] || "secondary").trim() || "secondary";
+          const action = (parts[3] || "disabled").trim() || "disabled";
+          const cleanedAction = action.replace(/^\{/, "").replace(/\}$/, "");
+          items.push({
+            id: id.trim(),
+            label: label.trim(),
+            style: style === "disabled" ? "secondary" : style,
+            action: cleanedAction || "disabled",
+            data: {},
+          });
+        }
+        start = -1;
+      }
     }
-    if (value.startsWith("b:")) {
-      const parts = value.slice(2).split(":");
-      const [id, label, style = "secondary", action = "disabled"] = parts;
-      items.push({ id: id || `button-${items.length}`, label: label || "button", style: style || "secondary", action: action || "disabled", data: {} });
-    }
-  });
+  }
   return items;
 }
 
@@ -216,34 +258,47 @@ function renderBuilderLayoutPreview() {
   const preview = document.getElementById("preview-btns");
   if (!preview) return;
   preview.innerHTML = "";
+
   const items = parseBuilderLayout(rawText);
   if (!items.length) {
     preview.innerHTML = "<p class='builder-empty'>add a button layout to preview it.</p>";
     return;
   }
 
-  const rows = [];
-  let currentRow = [];
   const buttonMap = {};
   items.filter(item => item && item.id).forEach(item => { buttonMap[item.id] = item; });
 
-  const normalized = items.flatMap(item => {
-    if (item.type === "separator") return [{ __separator__: true }];
-    if (item.type === "display") {
-      const ids = Array.isArray(item.item_ids) ? item.item_ids : [];
-      return ids.map(id => buttonMap[id]).filter(Boolean);
+  const rows = [];
+  let currentRow = [];
+  const normalized = [];
+  for (const item of items) {
+    if (!item) continue;
+    if (item.type === "separator") {
+      normalized.push({ __separator__: true });
+      continue;
     }
-    return [item];
-  });
+    if (item.type === "display") {
+      const refs = Array.isArray(item.item_ids) ? item.item_ids : [];
+      for (const ref of refs) {
+        const target = buttonMap[ref];
+        if (target) normalized.push(target);
+      }
+      continue;
+    }
+    normalized.push(item);
+  }
 
-  normalized.forEach(item => {
+  for (const item of normalized) {
     if (item && item.__separator__) {
       if (currentRow.length) { rows.push(currentRow); currentRow = []; }
-      return;
+      continue;
     }
-    if (currentRow.length >= 5) { rows.push(currentRow); currentRow = []; }
+    if (currentRow.length >= 5) {
+      rows.push(currentRow);
+      currentRow = [];
+    }
     currentRow.push(item);
-  });
+  }
   if (currentRow.length) rows.push(currentRow);
 
   rows.forEach(row => {
@@ -252,13 +307,124 @@ function renderBuilderLayoutPreview() {
     row.forEach(item => {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = `button button-${item.style === "danger" ? "danger" : item.style === "primary" ? "primary" : item.style === "success" ? "success" : "secondary"}`;
+      const styleClass = item.style === "danger" ? "danger" : item.style === "primary" ? "primary" : item.style === "success" ? "success" : "secondary";
+      btn.className = `button button-${styleClass}`;
       btn.textContent = item.label || item.id || "button";
-      btn.disabled = item.action === "disabled" || item.style === "disabled";
+      btn.disabled = String(item.action || "").toLowerCase() === "disabled" || item.style === "disabled";
       rowEl.appendChild(btn);
     });
     preview.appendChild(rowEl);
   });
+}
+
+function buildBuilderContainerItems() {
+  const items = parseBuilderLayout(document.getElementById("builder-layout")?.value || "");
+  const buttonMap = {};
+  const result = [];
+  const order = [];
+
+  for (const item of items) {
+    if (!item || item.type === "separator") continue;
+    if (item.type === "display") {
+      for (const ref of item.item_ids || []) {
+        if (!buttonMap[ref]) buttonMap[ref] = true;
+        if (!order.includes(ref)) order.push(ref);
+      }
+      continue;
+    }
+    if (!item.id) continue;
+    buttonMap[item.id] = item;
+    if (!order.includes(item.id)) order.push(item.id);
+  }
+
+  for (const id of order) {
+    const item = buttonMap[id];
+    if (!item) continue;
+    const action = String(item.action || "").trim();
+    let normalizedAction = action;
+    let data = {};
+    if (action === "disabled") {
+      normalizedAction = "disabled";
+    } else if (action.startsWith("role:add:")) {
+      normalizedAction = "grant_role";
+    }
+    result.push({
+      id: String(item.id),
+      label: String(item.label || item.id),
+      style: String(item.style || "secondary"),
+      action: normalizedAction,
+      data,
+    });
+  }
+
+  return result;
+}
+
+async function saveBuilderMessage(postAfter = false) {
+  if (!state.guild) {
+    toast("select a server first", "err");
+    return;
+  }
+  const name = document.getElementById("builder-name")?.value.trim() || "";
+  const content = document.getElementById("builder-content")?.value || "";
+  const containerName = name;
+  const channelValue = document.getElementById("builder-channel")?.value || "";
+
+  if (!name) {
+    toast("message name is required", "err");
+    return;
+  }
+  if (!content.trim()) {
+    toast("message text is required", "err");
+    return;
+  }
+
+  const layoutItems = buildBuilderContainerItems();
+  if (layoutItems.length) {
+    const containerResult = await api(`/api/guild/${state.guild.id}/containers`, {
+      method: "POST",
+      body: JSON.stringify({ name: containerName, items: layoutItems, accent_color: null }),
+    });
+    if (!containerResult?.ok) {
+      toast(containerResult?.error || "failed to save button layout", "err");
+      return;
+    }
+  }
+
+  const messageResult = await api(`/api/guild/${state.guild.id}/messages`, {
+    method: "POST",
+    body: JSON.stringify({
+      name,
+      content,
+      action: "none",
+      container: layoutItems.length ? containerName : null,
+    }),
+  });
+
+  if (!messageResult?.ok) {
+    toast(messageResult?.error || "failed to save message", "err");
+    return;
+  }
+
+  if (postAfter) {
+    if (!channelValue) {
+      toast("pick a channel first", "err");
+      return;
+    }
+    const postResult = await api(`/api/guild/${state.guild.id}/messages/${encodeURIComponent(name)}/send`, {
+      method: "POST",
+      body: JSON.stringify({ channel_id: Number(channelValue) }),
+    });
+    if (!postResult?.ok) {
+      toast(postResult?.error || "failed to post message", "err");
+      return;
+    }
+    toast("message posted");
+  } else {
+    toast("message saved");
+  }
+
+  await loadSavedMessages();
 }
 
 async function loadSavedMessages() {
@@ -292,6 +458,9 @@ async function init() {
   document.getElementById("create-ticket-panel")?.addEventListener("click", createTicketPanel);
   document.getElementById("builder-render-layout")?.addEventListener("click", renderBuilderLayoutPreview);
   document.getElementById("builder-layout")?.addEventListener("input", renderBuilderLayoutPreview);
+  document.getElementById("builder-save")?.addEventListener("click", () => saveBuilderMessage(false));
+  document.getElementById("builder-post")?.addEventListener("click", () => saveBuilderMessage(true));
+  if (state.textChannels?.length) fillSelect(document.getElementById("builder-channel"), state.textChannels);
 }
 
 init();
