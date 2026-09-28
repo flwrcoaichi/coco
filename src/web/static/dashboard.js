@@ -45,7 +45,13 @@ async function api(path, options = {}) {
     ...options,
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(options.headers || {}) },
   });
-  if (response.status === 401) {
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    console.error(`API Error [${response.status}] on ${path}:`, errorText);
+
+    if (response.status === 401) {
+      return null;
+    }
     return null;
   }
   try { return await response.json(); } catch { return null; }
