@@ -391,6 +391,14 @@ textarea {
   flex-wrap: wrap;
 }
 
+.builder-divider {
+  height: 1px;
+  margin: 12px 0;
+  background: linear-gradient(90deg, rgba(72, 64, 52, 0.2), rgba(72, 64, 52, 0.7), rgba(72, 64, 52, 0.2));
+  border: 0;
+  border-radius: 999px;
+}
+
 .list-box {
   margin-top: 10px;
   display: grid;

@@ -297,6 +297,7 @@ function renderBuilderLayoutPreview() {
   for (const item of normalized) {
     if (item && item.__separator__) {
       if (currentRow.length) { rows.push(currentRow); currentRow = []; }
+      rows.push({ __divider__: true });
       continue;
     }
     if (currentRow.length >= 5) {
@@ -308,6 +309,14 @@ function renderBuilderLayoutPreview() {
   if (currentRow.length) rows.push(currentRow);
 
   rows.forEach(row => {
+    if (row && row.__divider__) {
+      const divider = document.createElement("div");
+      divider.className = "builder-divider";
+      divider.textContent = "";
+      preview.appendChild(divider);
+      return;
+    }
+
     const rowEl = document.createElement("div");
     rowEl.className = "button-row";
     row.forEach(item => {
@@ -330,7 +339,11 @@ function buildBuilderContainerItems() {
   const order = [];
 
   for (const item of items) {
-    if (!item || item.type === "separator") continue;
+    if (!item) continue;
+    if (item.type === "separator") {
+      result.push({ type: "separator" });
+      continue;
+    }
     if (item.type === "display") {
       for (const ref of item.item_ids || []) {
         if (!buttonMap[ref]) buttonMap[ref] = true;

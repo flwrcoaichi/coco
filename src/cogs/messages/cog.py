@@ -127,6 +127,92 @@ def build_container_rows(guild_id: int, container: dict) -> list[ui.ActionRow]:
     return rows
 
 
+def build_container_layout(guild_id: int, container: dict) -> list[ui.Item]:
+    """builds a Discord layout view sequence with separators preserved."""
+    rows = build_container_rows(guild_id, container)
+    if not rows:
+        return []
+
+    raw_items = container.get("items", [])
+    current_row: ui.ActionRow | None = None
+    layout_items: list[ui.Item] = []
+    button_map: dict[str, dict] = {}
+    for raw_item in raw_items:
+        if isinstance(raw_item, dict) and "id" in raw_item:
+            button_map[str(raw_item["id"])] = raw_item
+
+    display_mode = any(isinstance(item, dict) and item.get("type") == "display" for item in raw_items)
+
+    def append_button(raw_item: dict) -> None:
+        nonlocal current_row
+        if not isinstance(raw_item, dict) or "id" not in raw_item:
+            return
+        if current_row is None:
+            current_row = ui.ActionRow()
+        elif len(current_row.children) >= 5:
+            layout_items.append(current_row)
+            current_row = ui.ActionRow()
+        style_name = raw_item.get("style", "secondary")
+        style = _STYLE_MAP.get(style_name, discord.ButtonStyle.secondary)
+        disabled = str(raw_item.get("action", "")).lower() == "disabled" or style_name == "disabled"
+        if disabled:
+            style = discord.ButtonStyle.secondary
+        current_row.add_item(
+            ContainerButton(
+                guild_id=guild_id,
+                container_name=container["name"],
+                item_id=raw_item["id"],
+                label=raw_item.get("label", "click me"),
+                style=style,
+                disabled=disabled,
+            )
+        )
+
+    sequence: list[dict | str] = []
+    if display_mode:
+        for raw_item in raw_items:
+            if not isinstance(raw_item, dict):
+                continue
+            kind = raw_item.get("type")
+            if kind == "separator":
+                sequence.append({"__separator__": True})
+                continue
+            if kind == "display":
+                item_ids = raw_item.get("item_ids") or raw_item.get("items") or []
+                if isinstance(item_ids, str):
+                    item_ids = [part.strip() for part in item_ids.split(",") if part.strip()]
+                for item_id in item_ids:
+                    if isinstance(item_id, str):
+                        candidate = button_map.get(item_id)
+                        if candidate is not None:
+                            sequence.append(candidate)
+                continue
+    else:
+        for raw_item in raw_items:
+            if not isinstance(raw_item, dict):
+                continue
+            if raw_item.get("type") == "separator":
+                sequence.append({"__separator__": True})
+            elif "id" in raw_item:
+                sequence.append(raw_item)
+
+    for item in sequence:
+        if isinstance(item, dict) and item.get("__separator__") is True:
+            if current_row is not None and len(current_row.children) > 0:
+                layout_items.append(current_row)
+                current_row = None
+                layout_items.append(ui.Separator(spacing=discord.SeparatorSpacing.small))
+            continue
+        append_button(item)
+
+    if current_row is not None and len(current_row.children) > 0:
+        layout_items.append(current_row)
+
+    if len(layout_items) > 0:
+        return layout_items
+    return rows
+
+
 def build_container_view(guild_id: int, container: dict) -> ui.ActionRow | None:
     """backwards-compatible wrapper returning the first row from a container."""
     rows = build_container_rows(guild_id, container)
@@ -164,6 +250,8 @@ class ContainerButton(ui.DynamicItem[ui.Button[ui.View]], template=r"cm:c:(\d+):
         self.guild_id = guild_id
         self.container_name = container_name
         self.item_id = item_id
+        self.disabled = disabled
+        self.item.disabled = disabled
 
     @classmethod
     async def from_custom_id(
@@ -181,7 +269,7 @@ class ContainerButton(ui.DynamicItem[ui.Button[ui.View]], template=r"cm:c:(\d+):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        if self.disabled:
+        if self.item.disabled or getattr(self, "disabled", False):
             return
         bot = interaction.client
         config = await find_item_by_id(bot.db, self.guild_id, self.item_id)  # type: ignore[attr-defined]

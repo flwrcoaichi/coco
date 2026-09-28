@@ -569,7 +569,7 @@ class DashboardServer:
         import discord
         from src.cogs.messages.db import get_message, set_posted
         from src.data.button_containers import get_container
-        from src.cogs.messages.cog import build_container_rows
+        from src.cogs.messages.cog import build_container_layout
         from src.utils.ui import BaseLayout
         guild_id = int(guild_id_str)
         name     = request.match_info["name"]
@@ -589,8 +589,8 @@ class DashboardServer:
         if msg.get("container_name"):
             container = await get_container(self.bot.db, guild_id, msg["container_name"])
             if container and container["items"]:
-                for row in build_container_rows(guild_id, container):
-                    layout.add_item(row)
+                for item in build_container_layout(guild_id, container):
+                    layout.add_item(item)
         try:
             posted = await channel.send(view=layout)
         except discord.HTTPException as exc:
