@@ -356,16 +356,40 @@ function buildBuilderContainerItems() {
     if (!order.includes(item.id)) order.push(item.id);
   }
 
+  const resolveRoleId = (roleRef) => {
+    if (!roleRef) return null;
+    const raw = String(roleRef).trim().replace(/^[{]+|[}]+$/g, "");
+    if (!raw) return null;
+    const plainId = Number(raw);
+    if (Number.isInteger(plainId) && plainId > 0) return plainId;
+    const mentionMatch = raw.match(/^<@&?(\d+)>$/);
+    if (mentionMatch) return Number(mentionMatch[1]);
+    const match = (state.roles || []).find(role => {
+      const name = String(role?.name || "").trim();
+      return name && (name.toLowerCase() === raw.toLowerCase() || name.toLowerCase() === raw.toLowerCase().replace(/[^a-z0-9]+/g, " "));
+    });
+    return match ? Number(match.id) : null;
+  };
+
   for (const id of order) {
     const item = buttonMap[id];
     if (!item) continue;
     const action = String(item.action || "").trim();
     let normalizedAction = action;
-    let data = {};
+    let data = item.data && typeof item.data === "object" ? { ...item.data } : {};
     if (action === "disabled") {
       normalizedAction = "disabled";
     } else if (action.startsWith("role:add:")) {
       normalizedAction = "grant_role";
+      const roleId = resolveRoleId(action.slice("role:add:".length));
+      if (roleId) data.role_id = roleId;
+    } else if (action.startsWith("role:remove:")) {
+      normalizedAction = "grant_role";
+      const roleId = resolveRoleId(action.slice("role:remove:".length));
+      if (roleId) data.role_id = roleId;
+    } else if (action === "grant_role" || action === "give_role") {
+      const roleId = data.role_id ?? resolveRoleId(item.data?.role_id ?? item.id);
+      if (roleId) data.role_id = Number(roleId);
     }
     result.push({
       id: String(item.id),
