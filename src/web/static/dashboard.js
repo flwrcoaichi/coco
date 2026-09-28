@@ -34,14 +34,18 @@ function loadToken() {
 }
 
 async function api(path, options = {}) {
+  const token = state.token || loadToken();
+  if (!token) {
+    showSignedOut();
+    return null;
+  }
+  state.token = token;
+
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: { Authorization: `Bearer ${state.token}`, "Content-Type": "application/json", ...(options.headers || {}) },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(options.headers || {}) },
   });
   if (response.status === 401) {
-    if (state.token) {
-      signOut();
-    }
     return null;
   }
   try { return await response.json(); } catch { return null; }
@@ -137,8 +141,13 @@ async function loadGuilds() {
 
 async function selectGuild(guild) {
   state.guild = guild; document.getElementById("guild-name").textContent = guild.name;
-  const [roles, channels] = await Promise.all([api(`/api/guild/${guild.id}/roles`), api(`/api/guild/${guild.id}/channels`)]);
-  state.roles = roles || []; state.textChannels = (channels || []).filter(channel => channel.type === "text");
+
+  const roles = await api(`/api/guild/${guild.id}/roles`);
+  const channels = await api(`/api/guild/${guild.id}/channels`);
+
+  state.roles = roles || [];
+  state.textChannels = (channels || []).filter(channel => channel.type === "text");
+
   const config = await api(`/api/guild/${guild.id}/config`);
   loadFields(document.getElementById("config-fields"), configFields, config || {});
   fillSelect(document.getElementById("ticket-panel-channel"), state.textChannels);
