@@ -364,9 +364,12 @@ function buildBuilderContainerItems() {
     if (Number.isInteger(plainId) && plainId > 0) return plainId;
     const mentionMatch = raw.match(/^<@&?(\d+)>$/);
     if (mentionMatch) return Number(mentionMatch[1]);
+
+    const normalizeName = (value) => String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const normalizedRaw = normalizeName(raw);
     const match = (state.roles || []).find(role => {
       const name = String(role?.name || "").trim();
-      return name && (name.toLowerCase() === raw.toLowerCase() || name.toLowerCase() === raw.toLowerCase().replace(/[^a-z0-9]+/g, " "));
+      return name && normalizeName(name) === normalizedRaw;
     });
     return match ? Number(match.id) : null;
   };
